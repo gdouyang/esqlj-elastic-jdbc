@@ -5,14 +5,19 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.elasticsearch.common.geo.GeoPoint;
-import org.elasticsearch.index.query.GeoBoundingBoxQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.index.query.QueryStringQueryBuilder;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.model.EvaluateQueryResult;
 import org.fpasti.jdbc.esqlj.support.EsqljConstants;
 import org.fpasti.jdbc.esqlj.support.Utils;
 
+import co.elastic.clients.elasticsearch._types.CoordsGeoBounds;
+import co.elastic.clients.elasticsearch._types.GeoBounds;
+import co.elastic.clients.elasticsearch._types.GeoLocation;
+import co.elastic.clients.elasticsearch._types.TopLeftBottomRightGeoBounds;
+import co.elastic.clients.elasticsearch._types.query_dsl.GeoBoundingBoxQuery;
+import co.elastic.clients.elasticsearch._types.query_dsl.GeoValidationMethod;
+import co.elastic.clients.elasticsearch._types.query_dsl.QueryBase;
+import co.elastic.clients.elasticsearch._types.query_dsl.QueryBuilders;
+import co.elastic.clients.elasticsearch._types.query_dsl.QueryStringQuery.Builder;
 import net.sf.jsqlparser.expression.Function;
 
 /**
@@ -40,24 +45,31 @@ public class ExpressionResolverElasticFunction {
 		String query = arguments.get(0).toString();
 		String[] fields = arguments.get(1).toString().split(",");
 		
-		QueryStringQueryBuilder qsqb = QueryBuilders.queryStringQuery(query);
-		Arrays.asList(fields).forEach(field -> {
-			qsqb.field(field);
-			});
+		Builder qsqb = QueryBuilders.queryString().query(query);
+		qsqb.fields(Arrays.asList(fields));
 		
 		arguments.stream().skip(2).forEach(param -> {
 			Utils.setAttributeInElasticObject(qsqb, getParameterName(param.toString()), getParameterValue(param.toString()));
 		});
 	
-		return new EvaluateQueryResult(qsqb);
+		return new EvaluateQueryResult(qsqb.build()._toQuery());
 	}
 	
 	private static EvaluateQueryResult geoBoundingBox(String queryType, List<Object> arguments) throws SQLSyntaxErrorException {
 		checkExactNumberOfParameters(queryType, arguments, 5);
 		
-		GeoBoundingBoxQueryBuilder builder = QueryBuilders.geoBoundingBoxQuery(arguments.get(0).toString());
-		builder.setCorners(new GeoPoint(convertToDouble(arguments.get(1)), convertToDouble(arguments.get(2))), new GeoPoint(convertToDouble(arguments.get(3)), convertToDouble(arguments.get(4))));
-		return new EvaluateQueryResult(builder);
+		GeoBoundingBoxQuery.Builder builder = QueryBuilders.geoBoundingBox();//.boundingBox(arguments.get(0).toString());
+		builder
+		  .field("geoPointField")
+//		  .validationMethod(GeoValidationMethod.Strict)
+//		  .ignoreUnmapped(true)
+//		  .boost(1.0f)
+		  .boundingBox(new GeoBounds.Builder().tlbr(new TopLeftBottomRightGeoBounds.Builder()
+		      .topLeft(new GeoLocation.Builder().coords(Arrays.asList(convertToDouble(arguments.get(2)), convertToDouble(arguments.get(1)))).build())
+		      .bottomRight(new GeoLocation.Builder().coords(Arrays.asList(convertToDouble(arguments.get(3)), convertToDouble(arguments.get(3)))).build())
+		      .build())
+		      .build());
+		return new EvaluateQueryResult(builder.build()._toQuery());
 	}
 	
 	private static double convertToDouble(Object value) {

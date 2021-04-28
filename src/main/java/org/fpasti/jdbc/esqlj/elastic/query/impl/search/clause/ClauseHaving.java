@@ -4,15 +4,16 @@ import java.sql.SQLSyntaxErrorException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.IntStream;
-
-import org.elasticsearch.script.Script;
-import org.elasticsearch.search.aggregations.PipelineAggregatorBuilders;
-import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
+import org.fpasti.jdbc.esqlj.elastic.query.impl.search.clause.select.TermsAggregationBuilderWrapper;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.clause.utils.ExpressionResolverValue;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementSelect;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.ExpressionEnum;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryColumn;
-
+import co.elastic.clients.elasticsearch._types.InlineScript;
+import co.elastic.clients.elasticsearch._types.Script;
+import co.elastic.clients.elasticsearch._types.aggregations.Aggregation.Builder.ContainerBuilder;
+import co.elastic.clients.elasticsearch._types.aggregations.BucketSelectorAggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.BucketsPath;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.NotExpression;
@@ -31,7 +32,7 @@ import net.sf.jsqlparser.schema.Column;
 
 public class ClauseHaving {
 
-	public static void manageHavingCondition(SqlStatementSelect select, TermsAggregationBuilder deeperTermsAggregationBuilder) throws SQLSyntaxErrorException {
+	public static void manageHavingCondition(SqlStatementSelect select, TermsAggregationBuilderWrapper deeperTermsAggregationBuilder) throws SQLSyntaxErrorException {
 		String bucketSelectorScript = evaluateHavingExpression(select.getHavingCondition(), select);
 		
 		Map<String, String> params = new HashMap<String, String>();
@@ -42,7 +43,12 @@ public class ClauseHaving {
 			}
 		}
 		
-		deeperTermsAggregationBuilder.subAggregation(PipelineAggregatorBuilders.bucketSelector("bucket_filter", params, new Script(bucketSelectorScript)));
+		BucketSelectorAggregation selectorAggregation = new BucketSelectorAggregation.Builder()
+		    .bucketsPath(new BucketsPath.Builder().dict(params).build())
+		    .script(new Script.Builder()
+                .inline(new InlineScript.Builder().source(bucketSelectorScript).build()).build())
+		    .build();
+		deeperTermsAggregationBuilder.aggregations("bucket_filter", selectorAggregation._toAggregation());
 	}
 	
 	private static String evaluateHavingExpression(Expression expression, SqlStatementSelect select) throws SQLSyntaxErrorException {

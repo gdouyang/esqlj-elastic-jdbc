@@ -6,25 +6,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
-import org.elasticsearch.action.search.SearchRequest;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.search.builder.PointInTimeBuilder;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.fpasti.jdbc.esqlj.Configuration;
 import org.fpasti.jdbc.esqlj.ConfigurationPropertyEnum;
 import org.fpasti.jdbc.esqlj.EsConnection;
 import org.fpasti.jdbc.esqlj.EsMetaData;
 import org.fpasti.jdbc.esqlj.elastic.metadata.ElasticServerDetails;
 import org.fpasti.jdbc.esqlj.elastic.metadata.MetaDataService;
-import org.fpasti.jdbc.esqlj.elastic.model.ElasticObject;
 import org.fpasti.jdbc.esqlj.elastic.model.ElasticFieldType;
+import org.fpasti.jdbc.esqlj.elastic.model.ElasticObject;
 import org.fpasti.jdbc.esqlj.elastic.model.IndexMetaData;
 import org.fpasti.jdbc.esqlj.elastic.query.data.PageDataElastic;
 import org.fpasti.jdbc.esqlj.elastic.query.model.PaginationType;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementSelect;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryType;
+import co.elastic.clients.elasticsearch._types.FieldValue;
+import co.elastic.clients.elasticsearch._types.Time;
+import co.elastic.clients.elasticsearch.core.SearchRequest;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch.core.search.PointInTimeReference;
+import co.elastic.clients.elasticsearch.core.search.ResponseBody;
 
 /**
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
@@ -34,15 +34,14 @@ public class RequestInstance {
 
 	private Map<String, ElasticObject> fields;
 	private List<String> columnNames;
-	private SearchRequest searchRequest;
-	private SearchSourceBuilder searchSourceBuilder;
+	private SearchRequest.Builder searchSourceBuilder;
 	private int fetchSize;
 	private PaginationType paginationMode = PaginationType.NO_SCROLL;
 	private String paginationId;
 	private MetaDataService metaDataService;
 	private IndexMetaData indexMetaData;
 	private boolean pointInTimeApiAvailable;
-	private Object[] paginationSortValues;
+	private List<FieldValue> paginationSortValues;
 	private boolean scrollOpen;
 	private SqlStatementSelect select;
 	
@@ -52,8 +51,7 @@ public class RequestInstance {
 		this.metaDataService = ((EsMetaData)connection.getMetaData()).getMetaDataService();
 		this.select = select;
 		this.indexMetaData = metaDataService.getIndexMetaData(select.getIndex().getName());
-		searchRequest = new SearchRequest(select.getIndex().getName());
-		searchSourceBuilder = new SearchSourceBuilder();
+		searchSourceBuilder = new SearchRequest.Builder().index(select.getIndex().getName());
 		this.fetchSize = fetchSize;
 		implementScrollStrategy();
 		checkPointInTimeWorkAround(connection); // hey Elastic team! Where is the api for point in time search?
@@ -88,10 +86,10 @@ public class RequestInstance {
 	}
 
 	public SearchRequest getSearchRequest() {
-		return searchRequest;
+		return searchSourceBuilder.build();
 	}
 
-	public SearchSourceBuilder getSearchSourceBuilder() {
+	public SearchRequest.Builder getSearchSourceBuilder() {
 		return searchSourceBuilder;
 	}
 
@@ -146,7 +144,7 @@ public class RequestInstance {
 		setScrollOpen(true);
 	}
 
-	public void updateRequest(SearchResponse searchResponse, PageDataElastic pageData) throws SQLNonTransientConnectionException {
+	public void updateRequest(ResponseBody<?> searchResponse, PageDataElastic pageData) throws SQLNonTransientConnectionException {
 		updateFetchSize(pageData);
 		updatePagination(searchResponse);
 	}
@@ -170,26 +168,31 @@ public class RequestInstance {
 	}
 	
 	@SuppressWarnings("incomplete-switch")
-	private void updatePagination(SearchResponse searchResponse) throws SQLNonTransientConnectionException {
+	private void updatePagination(ResponseBody<?> searchResponse) throws SQLNonTransientConnectionException {
 		switch(paginationMode) {
 			case SCROLL_API:
-				paginationId = searchResponse.getScrollId();
+				paginationId = searchResponse.scrollId();
 				break;
 			case BY_ORDER:
 				updateSearchAfter(searchResponse);
 				break;
 			case BY_ORDER_WITH_PIT:
 				updateSearchAfter(searchResponse);
-				PointInTimeBuilder pit = new PointInTimeBuilder(searchResponse.pointInTimeId());
-				pit.setKeepAlive(TimeValue.timeValueMinutes(Configuration.getConfiguration(ConfigurationPropertyEnum.CFG_QUERY_SCROLL_TIMEOUT_MINUTES, Long.class)));
-				getSearchSourceBuilder().pointInTimeBuilder(pit);
+				Long configuration = Configuration.getConfiguration(ConfigurationPropertyEnum.CFG_QUERY_SCROLL_TIMEOUT_MINUTES, Long.class);
+	            Time time = new Time.Builder().time(String.format("%dm", configuration)).build();
+	            PointInTimeReference pit = new PointInTimeReference.Builder()
+	                .id(searchResponse.pitId())
+	                .keepAlive(time)
+	                .build();
+				getSearchSourceBuilder().pit(pit);
 				break;
 		}
 	}
 
-	private void updateSearchAfter(SearchResponse searchResponse) {
-		if(searchResponse.getHits().getHits().length > 0) {
-			paginationSortValues = searchResponse.getHits().getAt(searchResponse.getHits().getHits().length - 1).getSortValues();
+	private void updateSearchAfter(ResponseBody<?> searchResponse) {
+		if(searchResponse.hits().hits().size() > 0) {
+			Hit<?> object = searchResponse.hits().hits().get(searchResponse.hits().hits().size() - 1);
+			paginationSortValues = object.sort();
 			searchSourceBuilder.searchAfter(paginationSortValues);
 		}
 	}
@@ -201,5 +204,5 @@ public class RequestInstance {
 			pointInTimeApiAvailable = true;
 		}
 	}
-
+	
 }

@@ -3,7 +3,7 @@ package org.fpasti.jdbc.esqlj.elastic.query.impl.search.model;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.elasticsearch.index.query.QueryBuilder;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 
 /**
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
@@ -11,27 +11,27 @@ import org.elasticsearch.index.query.QueryBuilder;
 
 public class EvaluateQueryResult {
 		private boolean and = true;
-		private List<QueryBuilder> queryBuilders = new ArrayList<QueryBuilder>();
-		private List<QueryBuilder> notQueryBuilders = new ArrayList<QueryBuilder>();
+		private List<Query> queryBuilders = new ArrayList<Query>();
+		private List<Query> notQueryBuilders = new ArrayList<Query>();
 		private TermsQuery termsQuery = new TermsQuery();
 		private boolean reverseNegateOnNot;
 		
 		public EvaluateQueryResult() {
 		}
 
-		public EvaluateQueryResult(QueryBuilder queryBuilder) {
+		public EvaluateQueryResult(Query queryBuilder) {
 			addQueryBuilder(queryBuilder);
 		}
 
-		public List<QueryBuilder> getQueryBuilders() {
+		public List<Query> getQueryBuilders() {
 			return queryBuilders;
 		}
 
-		public List<QueryBuilder> getNotQueryBuilders() {
+		public List<Query> getNotQueryBuilders() {
 			return notQueryBuilders;
 		}
 
-		public void addQueryBuilder(QueryBuilder queryBuilder) {
+		public void addQueryBuilder(Query queryBuilder) {
 			queryBuilders.add(queryBuilder);
 		}
 		

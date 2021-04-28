@@ -5,21 +5,29 @@ import java.sql.SQLSyntaxErrorException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
-import org.elasticsearch.index.query.BoolQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.script.Script;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.RequestInstance;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.clause.utils.ExpressionResolverElasticFunction;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.clause.utils.ExpressionResolverValue;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.model.ElasticScriptMethodEnum;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.model.EvaluateQueryResult;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.model.TermsQuery;
+import org.fpasti.jdbc.esqlj.elastic.query.statement.IWhereCondition;
+import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementDelete;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementSelect;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.ExpressionEnum;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryColumn;
 
+import co.elastic.clients.elasticsearch._types.FieldValue;
+import co.elastic.clients.elasticsearch._types.InlineScript;
+import co.elastic.clients.elasticsearch._types.Script;
+import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch._types.query_dsl.QueryBuilders;
+import co.elastic.clients.elasticsearch._types.query_dsl.TermQuery;
+import co.elastic.clients.elasticsearch._types.query_dsl.TermsQueryField;
+import co.elastic.clients.json.JsonData;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.ExtractExpression;
 import net.sf.jsqlparser.expression.Function;
@@ -53,7 +61,7 @@ public class ClauseWhere {
 		
 		EvaluateQueryResult result = evaluateWhereExpression(select.getWhereCondition(), select);
 		
-		QueryBuilder qb = null;
+		Query qb = null;
 		
 		switch(result.getType()) {
 			case ONLY_ONE:
@@ -65,26 +73,49 @@ public class ClauseWhere {
 			case ONLY_ONE_TERMS:
 				Map.Entry<String,List<Object>> terms = result.getTermsQuery().getEqualObjects().entrySet().iterator().next();
 				if(terms.getValue().size() == 1) {
-					qb = QueryBuilders.termQuery(terms.getKey(), terms.getValue().get(0));
+					qb = QueryBuilders.term().field(terms.getKey()).value(FieldValue.of(JsonData.of(terms.getValue().get(0)))).build()._toQuery();
 				} else {
-					qb = QueryBuilders.termsQuery(terms.getKey(), terms.getValue());
+					List<FieldValue> v = terms.getValue().stream().map(o -> new FieldValue.Builder().anyValue(JsonData.of(o)).build()).collect(Collectors.toList());
+					TermsQueryField build = new TermsQueryField.Builder().value(v).build();
+					qb = QueryBuilders.terms().field(terms.getKey()).terms(build).build()._toQuery();
 				}
 				break;
 			case ONLY_ONE_NOT_TERMS:
 				Map.Entry<String,List<Object>> notTerms = result.getTermsQuery().getNotEqualObjects().entrySet().iterator().next();
-				qb = QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery(notTerms.getKey(), notTerms.getValue().get(0)));
+				TermQuery query = TermQuery.of((q) -> {
+					q.field(notTerms.getKey());
+					q.value(notTerms.getValue().get(0).toString());
+					return q;
+				});
+				qb = QueryBuilders.bool().mustNot(query._toQuery()).build()._toQuery();
 				break;
 			case MIXED:
-				qb = QueryBuilders.boolQuery();
-				getQueryBuilderFromResult(select.getWhereCondition(), result, qb);
+				BoolQuery.Builder bool = QueryBuilders.bool();
+				getQueryBuilderFromResult(select.getWhereCondition(), result, bool);
+				qb = bool.build()._toQuery();
 				break;
 		}
 		
 		req.getSearchSourceBuilder().query(qb);
 	}
 	
+	public static Query manageDleteWhere(SqlStatementDelete select) throws SQLSyntaxErrorException {
+      if(select.getWhereCondition() == null) {
+          return null;
+      }
+      
+      EvaluateQueryResult result = evaluateWhereExpression(select.getWhereCondition(), select);
+      
+      Query qb = null;
+      
+      BoolQuery.Builder bool = QueryBuilders.bool();
+      getQueryBuilderFromResult(select.getWhereCondition(), result, bool);
+      qb = bool.build()._toQuery();
+      return qb;
+  }
+	
 	@SuppressWarnings("unchecked")
-	private static EvaluateQueryResult evaluateWhereExpression(Expression expression, SqlStatementSelect select) throws SQLSyntaxErrorException {
+	private static EvaluateQueryResult evaluateWhereExpression(Expression expression, IWhereCondition select) throws SQLSyntaxErrorException {
 		switch(ExpressionEnum.resolveByInstance(expression)) {
 			case AND_EXPRESSION:
 				AndExpression andExpression = (AndExpression)expression;
@@ -94,8 +125,8 @@ public class ClauseWhere {
 				return resAndLeft;
 			case OR_EXPRESSION:
 				OrExpression orExpression = (OrExpression)expression;
-				BoolQueryBuilder leftBoolQueryBuilder = null;
-				BoolQueryBuilder rightBoolQueryBuilder = null;
+				Query leftBoolQueryBuilder = null;
+				Query rightBoolQueryBuilder = null;
 
 				EvaluateQueryResult resOrLeft = evaluateWhereExpression(orExpression.getLeftExpression(), select);
 				EvaluateQueryResult resOrRight = evaluateWhereExpression(orExpression.getRightExpression(), select);
@@ -112,16 +143,16 @@ public class ClauseWhere {
 					rightBoolQueryBuilder = createBoolQueryBuilder(resOrRight);
 				}
 				
-				QueryBuilder qbOr = null;
+				Query qbOr = null;
 				if(leftBoolQueryBuilder != null && rightBoolQueryBuilder == null) {
 					qbOr = mapResultToQueryBuilder(leftBoolQueryBuilder, resOrRight);
 				} else if(rightBoolQueryBuilder != null && leftBoolQueryBuilder == null) {
 					qbOr = mapResultToQueryBuilder(rightBoolQueryBuilder, resOrLeft);
 				} else if(leftBoolQueryBuilder != null && rightBoolQueryBuilder != null) {
-					qbOr = QueryBuilders.boolQuery();
-					((BoolQueryBuilder)qbOr).should().add(rightBoolQueryBuilder);
-					((BoolQueryBuilder)qbOr).should().add(leftBoolQueryBuilder);
-				} 
+					qbOr = QueryBuilders.bool()
+							.should(rightBoolQueryBuilder)
+							.should(leftBoolQueryBuilder).build()._toQuery();
+				}
 				
 				if(qbOr != null) {
 					return new EvaluateQueryResult(qbOr);
@@ -136,25 +167,33 @@ public class ClauseWhere {
 				if(greaterThan.getLeftExpression() instanceof ExtractExpression) {
 					return resolveExtract(greaterThan.getLeftExpression(), greaterThan.getRightExpression(), ">", select);
 				}
-				return new EvaluateQueryResult(QueryBuilders.rangeQuery(getColumn(greaterThan.getLeftExpression(), select)).gt(ExpressionResolverValue.evaluateValueExpression(greaterThan.getRightExpression())));
+				String column = getColumn(greaterThan.getLeftExpression(), select);
+				JsonData value = JsonData.of(ExpressionResolverValue.evaluateValueExpression(greaterThan.getRightExpression()));
+				return new EvaluateQueryResult(QueryBuilders.range(r -> r.field(column).gt(value)));
 			case GREATER_THAN_EQUALS:
 				GreaterThanEquals greaterThanEquals = (GreaterThanEquals)expression;
 				if(greaterThanEquals.getLeftExpression() instanceof ExtractExpression) {
 					return resolveExtract(greaterThanEquals.getLeftExpression(), greaterThanEquals.getRightExpression(), ">=", select);
 				}
-				return new EvaluateQueryResult(QueryBuilders.rangeQuery(getColumn(greaterThanEquals.getLeftExpression(), select)).gte(ExpressionResolverValue.evaluateValueExpression(greaterThanEquals.getRightExpression())));
+				String column2 = getColumn(greaterThanEquals.getLeftExpression(), select);
+				return new EvaluateQueryResult(QueryBuilders.range(r -> r.field(column2)
+						.gte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(greaterThanEquals.getRightExpression())))));
 			case MINOR_THAN:
 				MinorThan minorThan = (MinorThan)expression;
 				if(minorThan.getLeftExpression() instanceof ExtractExpression) {
 					return resolveExtract(minorThan.getLeftExpression(), minorThan.getRightExpression(), "<", select);
 				}
-				return new EvaluateQueryResult(QueryBuilders.rangeQuery(getColumn(minorThan.getLeftExpression(), select)).lt(ExpressionResolverValue.evaluateValueExpression(minorThan.getRightExpression())));
+				String column3 = getColumn(minorThan.getLeftExpression(), select);
+				return new EvaluateQueryResult(QueryBuilders.range(r -> r.field(column3)
+						.lt(JsonData.of(ExpressionResolverValue.evaluateValueExpression(minorThan.getRightExpression())))));
 			case MINOR_THAN_EQUALS:
 				MinorThanEquals minorThanEquals = (MinorThanEquals)expression;
 				if(minorThanEquals.getLeftExpression() instanceof ExtractExpression) {
 					return resolveExtract(minorThanEquals.getLeftExpression(), minorThanEquals.getRightExpression(), "<=", select);
 				}
-				return new EvaluateQueryResult(QueryBuilders.rangeQuery(getColumn(minorThanEquals.getLeftExpression(), select)).lte(ExpressionResolverValue.evaluateValueExpression(minorThanEquals.getRightExpression())));
+				String column4 = getColumn(minorThanEquals.getLeftExpression(), select);
+				return new EvaluateQueryResult(QueryBuilders.range(r -> r.field(column4)
+						.lte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(minorThanEquals.getRightExpression())))));
 			case EQUALS_TO:
 				EqualsTo equalsTo = (EqualsTo)expression;
 				if(equalsTo.getLeftExpression() instanceof ExtractExpression) {
@@ -173,31 +212,40 @@ public class ClauseWhere {
 				return netQr;
 			case IS_NULL_EXPRESSION:
  				IsNullExpression isNullExpression = (IsNullExpression)expression;
+ 				String column5 = getColumn(isNullExpression.getLeftExpression(), select);
  				if(isNullExpression.isNot()) {
- 					return new EvaluateQueryResult(QueryBuilders.existsQuery(getColumn(isNullExpression.getLeftExpression(), select)));
+ 					return new EvaluateQueryResult(QueryBuilders.exists(e -> {
+ 						e.field(column5);
+ 						return e;
+ 					}));
  				}
-				BoolQueryBuilder qbEqrIneNot = QueryBuilders.boolQuery();
-				qbEqrIneNot.mustNot().add(QueryBuilders.existsQuery(getColumn(isNullExpression.getLeftExpression(), select)));
-				EvaluateQueryResult eqrIne = new EvaluateQueryResult(qbEqrIneNot);
+				BoolQuery.Builder qbEqrIneNot = QueryBuilders.bool();
+				qbEqrIneNot.mustNot(QueryBuilders.exists(e -> e.field(column5)));
+				EvaluateQueryResult eqrIne = new EvaluateQueryResult(qbEqrIneNot.build()._toQuery());
 				eqrIne.setReverseNegateOnNot(true);
 				return eqrIne;
 			case NOT_EXPRESSION:
 				NotExpression notExpression = (NotExpression)expression;
 				EvaluateQueryResult res = evaluateWhereExpression(notExpression.getExpression(), select);
-				BoolQueryBuilder qbNot = QueryBuilders.boolQuery();
+				BoolQuery.Builder qbNot = QueryBuilders.bool();
 				getQueryBuilderFromResult(notExpression.getExpression(), res, qbNot);
-				BoolQueryBuilder qb = QueryBuilders.boolQuery();
-				qb.mustNot().add(qbNot);
-				return new EvaluateQueryResult(qb);
+				BoolQuery.Builder qb = QueryBuilders.bool();
+				qb.mustNot(qbNot.build()._toQuery());
+				return new EvaluateQueryResult(qb.build()._toQuery());
 			case BETWEEN:
 				Between between = (Between)expression;
 				if(between.getLeftExpression() instanceof ExtractExpression) {
 					return resolveExtractBetween(between, select);
 				}
-				return new EvaluateQueryResult(QueryBuilders.rangeQuery(getColumn(between.getLeftExpression(), select)).gte(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionStart())).lte(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionEnd())));
+				String column6 = getColumn(between.getLeftExpression(), select);
+				return new EvaluateQueryResult(QueryBuilders.range(r -> r.field(column6)
+						.gte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionStart())))
+						.lte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionEnd())))));
 			case LIKE_EXPRESSION:
 				LikeExpression likeExpression = (LikeExpression)expression;
-				return new EvaluateQueryResult(QueryBuilders.wildcardQuery(getColumn(likeExpression.getLeftExpression(), select), (String)ExpressionResolverValue.evaluateValueExpression(likeExpression.getRightExpression())));
+				String column7 = getColumn(likeExpression.getLeftExpression(), select);
+				return new EvaluateQueryResult(QueryBuilders.wildcard(w -> w.field(column7)
+						.value((String)ExpressionResolverValue.evaluateValueExpression(likeExpression.getRightExpression()))));
 			case IN_EXPRESSION:
 				InExpression inExpression = (InExpression)expression;
 				if(inExpression.getLeftExpression() instanceof ExtractExpression) {
@@ -214,7 +262,7 @@ public class ClauseWhere {
 		}
 	}
 
-	private static EvaluateQueryResult resolveExtract(Expression extractExpression, Object valueExpression, String operator, SqlStatementSelect select) throws SQLSyntaxErrorException {
+	private static EvaluateQueryResult resolveExtract(Expression extractExpression, Object valueExpression, String operator, IWhereCondition select) throws SQLSyntaxErrorException {
 		ExtractExpression extract = (ExtractExpression)extractExpression;
 		ElasticScriptMethodEnum scriptDateMethod = null;
 		try {
@@ -225,24 +273,34 @@ public class ClauseWhere {
 
 		if(ExpressionEnum.resolveByInstance(valueExpression) == ExpressionEnum.EXPRESSION_LIST) {
 			ExpressionList expressionList = (ExpressionList)valueExpression;
-			Map<String, Object> params = new HashMap<String, Object>();
+			Map<String, JsonData> params = new HashMap<String, JsonData>();
 			String scriptExpression = "";
 			for(int i = 0; i < expressionList.getExpressions().size(); i++) {
 				Expression expression = expressionList.getExpressions().get(i);
-				params.put(String.format("param%d", i), ExpressionResolverValue.evaluateValueExpression(expression));
+				params.put(String.format("param%d", i), JsonData.of(ExpressionResolverValue.evaluateValueExpression(expression)));
 				scriptExpression = scriptExpression.concat(scriptExpression.length() == 0 ? "" : " || ").concat(String.format("doc.%s.value.%s %s params.param%d", getColumn(extract.getExpression(), select), scriptDateMethod.getMethod(), operator, i));
 			}
-			Script script = new Script(Script.DEFAULT_SCRIPT_TYPE, Script.DEFAULT_SCRIPT_LANG, scriptExpression, params);
-			return new EvaluateQueryResult(QueryBuilders.scriptQuery(script));
+			Script script = new Script.Builder().inline(new InlineScript.Builder().params(params)
+					.source(scriptExpression).build()).build();
+			Query sq = QueryBuilders.script(s -> {
+				s.script(script);
+				return s;
+			});
+			return new EvaluateQueryResult(sq);
 		}
 		
-		Map<String, Object> params = new HashMap<String, Object>();
-		params.put("param", ExpressionResolverValue.evaluateValueExpression(valueExpression));
-		Script script = new Script(Script.DEFAULT_SCRIPT_TYPE, Script.DEFAULT_SCRIPT_LANG, String.format("doc.%s.value.%s %s params.param", getColumn(extract.getExpression(), select), scriptDateMethod.getMethod(), operator), params);
-		return new EvaluateQueryResult(QueryBuilders.scriptQuery(script));
+		Map<String, JsonData> params = new HashMap<String, JsonData>();
+		params.put("param", JsonData.of(ExpressionResolverValue.evaluateValueExpression(valueExpression)));
+		Script script = new Script.Builder().inline(new InlineScript.Builder().params(params)
+				.source(String.format("doc.%s.value.%s %s params.param", getColumn(extract.getExpression(), select), scriptDateMethod.getMethod(), operator)).build()).build();
+		Query sq = QueryBuilders.script(s -> {
+			s.script(script);
+			return s;
+		});
+		return new EvaluateQueryResult(sq);
 	}
 	
-	private static EvaluateQueryResult resolveExtractBetween(Between between, SqlStatementSelect select) throws SQLSyntaxErrorException {
+	private static EvaluateQueryResult resolveExtractBetween(Between between, IWhereCondition select) throws SQLSyntaxErrorException {
 		ExtractExpression extract = (ExtractExpression)between.getLeftExpression();
 		ElasticScriptMethodEnum scriptDateMethod = null;
 		try {
@@ -250,82 +308,100 @@ public class ClauseWhere {
 		} catch(IllegalArgumentException e) {
 			throw new SQLSyntaxErrorException(String.format("Unsupported extract params '%s'", extract.getName()));
 		}
-		Map<String, Object> params = new HashMap<String, Object>();
-		params.put("param1", ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionStart()));
-		params.put("param2", ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionEnd()));
-		Script script = new Script(Script.DEFAULT_SCRIPT_TYPE, Script.DEFAULT_SCRIPT_LANG, String.format("doc.%s.value.%s >= params.param1 && doc.%s.value.%s <= params.param2", getColumn(extract.getExpression(), select), scriptDateMethod.getMethod(), getColumn(extract.getExpression(), select), scriptDateMethod.getMethod()), params);
-		return new EvaluateQueryResult(QueryBuilders.scriptQuery(script));
+		Map<String, JsonData> params = new HashMap<String, JsonData>();
+		params.put("param1", JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionStart())));
+		params.put("param2", JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionEnd())));
+		
+		Script script = new Script.Builder().inline(new InlineScript.Builder().params(params)
+				.source(String.format("doc.%s.value.%s >= params.param1 && doc.%s.value.%s <= params.param2", getColumn(extract.getExpression(), select), scriptDateMethod.getMethod(), getColumn(extract.getExpression(), select), scriptDateMethod.getMethod())).build()).build();
+		Query sq = QueryBuilders.script(s -> {
+			s.script(script);
+			return s;
+		});
+		return new EvaluateQueryResult(sq);
 	}
 
 	private static void getQueryBuilderFromResult(Expression expression, EvaluateQueryResult result,
-			QueryBuilder qb) {
+			BoolQuery.Builder qb) {
 		if(!result.isListEmpty()) {
 			if(result.isAnd()) {
-				((BoolQueryBuilder)qb).must().addAll(result.getQueryBuilders());
+				qb.must(result.getQueryBuilders());
 			} else {
-				((BoolQueryBuilder)qb).should().addAll(result.getQueryBuilders());
+				qb.should(result.getQueryBuilders());
 			}
 		}
 		if(!result.isNotListEmpty()) {
-			((BoolQueryBuilder)qb).mustNot().addAll(result.getNotQueryBuilders());
+			qb.mustNot(result.getNotQueryBuilders());
 		}
 		if(!result.isTermsEmpty()) {
-			addTermsQuery((BoolQueryBuilder)qb, result.getTermsQuery(), result.isAnd());
+			addTermsQuery((BoolQuery.Builder)qb, result.getTermsQuery(), result.isAnd());
 		}
 	}
 	
-	private static BoolQueryBuilder createBoolQueryBuilder(EvaluateQueryResult queryResult) {
-		BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
-		boolQueryBuilder.must().addAll(queryResult.getQueryBuilders());
-		boolQueryBuilder.mustNot().addAll(queryResult.getNotQueryBuilders());
-		addTermsQuery(boolQueryBuilder, queryResult.getTermsQuery(), true);
-		return boolQueryBuilder;
+	private static Query createBoolQueryBuilder(EvaluateQueryResult queryResult) {
+		
+		
+		return BoolQuery.of(b -> {
+			b.must(queryResult.getQueryBuilders())
+			.mustNot(queryResult.getNotQueryBuilders());
+			
+			addTermsQuery(b, queryResult.getTermsQuery(), true);
+			return b;
+		})._toQuery();
 	}
 	
-	private static QueryBuilder mapResultToQueryBuilder(QueryBuilder queryBuilder, EvaluateQueryResult result) {
-		BoolQueryBuilder qbOr = QueryBuilders.boolQuery();
-
-		qbOr.should().add(queryBuilder);
-		qbOr.should().addAll(result.getQueryBuilders());
-		addTermsQuery(qbOr, result.getTermsQuery(), false);
-		if(result.getNotQueryBuilders().size() > 0) {
-			BoolQueryBuilder mustNot = QueryBuilders.boolQuery();
-			mustNot.mustNot().addAll(result.getNotQueryBuilders());
-			qbOr.should().add(mustNot);
-		}
-		return qbOr;
+	private static Query mapResultToQueryBuilder(Query queryBuilder, EvaluateQueryResult result) {
+		return BoolQuery.of(b -> {
+			b.should(queryBuilder)
+			.should(result.getQueryBuilders());
+			
+			if(result.getNotQueryBuilders().size() > 0) {
+				b.should(BoolQuery.of(b1 -> b1.mustNot(result.getNotQueryBuilders()))._toQuery());
+			}
+			
+			addTermsQuery(b, result.getTermsQuery(), false);
+			return b;
+		})._toQuery();
 	}
 
-	private static void addTermsQuery(BoolQueryBuilder qb, TermsQuery queryContents, boolean and) {
+	private static void addTermsQuery(BoolQuery.Builder qb, TermsQuery queryContents, boolean and) {
 		if(queryContents.getEqualObjects() != null && !queryContents.getEqualObjects().isEmpty()) {
 			queryContents.getEqualObjects().forEach((field, values) -> {
 				if(and) {
-					values.stream().forEach(value -> qb.must().add(QueryBuilders.termQuery(field, value)));
+					values.stream().forEach(value -> qb.must(TermQuery.of(t -> t.field(field).value(FieldValue.of(JsonData.of(value))))._toQuery()));
 				}
 				else {
-					qb.should().add(QueryBuilders.termsQuery(field, values));
+					List<FieldValue> termsValues = values.stream().map(v -> {
+						return FieldValue.of(JsonData.of(v));
+					}).collect(Collectors.toList());
+					Query terms = QueryBuilders.terms(t -> t.field(field).terms(new TermsQueryField.Builder().value(termsValues).build()));
+					qb.should(terms);
 				} 
 			});
 		}
 		
 		if(queryContents.getNotEqualObjects() != null && !queryContents.getNotEqualObjects().isEmpty()) {
-			BoolQueryBuilder mustNotQb = QueryBuilders.boolQuery();
+			BoolQuery.Builder mustNotQb = QueryBuilders.bool();
 			
 			queryContents.getNotEqualObjects().forEach((field, values) -> {
 				if(and) {
-					values.stream().forEach(value -> qb.mustNot().add(QueryBuilders.termQuery(field, value)));
+					values.stream().forEach(value -> qb.mustNot(TermQuery.of(t -> t.field(field).value(FieldValue.of(JsonData.of(value))))._toQuery()));
 				} else {
-					mustNotQb.mustNot().add(QueryBuilders.termsQuery(field, values));
+					List<FieldValue> termsValues = values.stream().map(v -> {
+						return FieldValue.of(JsonData.of(v));
+					}).collect(Collectors.toList());
+					Query terms = QueryBuilders.terms(t -> t.field(field).terms(new TermsQueryField.Builder().value(termsValues).build()));
+					mustNotQb.mustNot(terms);
 				} 
 			});
 			
 			if(!and) {
-				qb.should().add(mustNotQb);
+				qb.should(mustNotQb.build()._toQuery());
 			}
 		}
 	}
 	
-	private static String getColumn(Expression expression, SqlStatementSelect select) throws SQLSyntaxErrorException {
+	public static String getColumn(Expression expression, IWhereCondition select) throws SQLSyntaxErrorException {
 		if(!(expression instanceof Column)) {
 			throw new SQLSyntaxErrorException(String.format("Unsupported WHERE expression: %s", expression.toString()));
 		}

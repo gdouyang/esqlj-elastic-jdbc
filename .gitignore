@@ -12,3 +12,6 @@ buildNumber.properties
 /.project
 /.settings/
 /.classpath
+*.jar
+.idea/
+esqlj.iml

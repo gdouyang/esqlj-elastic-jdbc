@@ -1,6 +1,8 @@
 package org.fpasti.jdbc.esqlj.elastic.metadata;
 
-import org.elasticsearch.client.core.MainResponse;
+import co.elastic.clients.elasticsearch._types.ElasticsearchVersionInfo;
+import co.elastic.clients.elasticsearch.core.InfoResponse;
+import co.elastic.clients.util.DateTime;
 
 /**
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
@@ -12,7 +14,7 @@ public class ElasticServerDetails {
 	private String clusterName;
 	private String clusterUuid;
 	private String nodeName;
-	private String buildDate;
+	private DateTime buildDate;
 	private String buildFlavor;
 	private String buildHash;
 	private String buildType;
@@ -22,20 +24,20 @@ public class ElasticServerDetails {
 	private String number;
 	private Long releaseNumber;
 
-	public ElasticServerDetails(MainResponse response) {
-		this.clusterName = response.getClusterName();
-		this.clusterUuid = response.getClusterUuid();
-		this.nodeName = response.getNodeName();
+	public ElasticServerDetails(InfoResponse response) {
+		this.clusterName = response.clusterName();
+		this.clusterUuid = response.clusterUuid();
+		this.nodeName = response.name();
 		
-		MainResponse.Version version = response.getVersion();
-		this.buildDate = version.getBuildDate();
-		this.buildFlavor = version.getBuildFlavor();
-		this.buildHash = version.getBuildHash();
-		this.buildType = version.getBuildType();
-		this.luceneVersion = version.getLuceneVersion();
-		this.minimumIndexCompatibilityVersion= version.getMinimumIndexCompatibilityVersion();
-		this.minimumWireCompatibilityVersion = version.getMinimumWireCompatibilityVersion();
-		this.number = version.getNumber();
+		ElasticsearchVersionInfo version = response.version();
+		this.buildDate = version.buildDate();
+		this.buildFlavor = version.buildFlavor();
+		this.buildHash = version.buildHash();
+		this.buildType = version.buildType();
+		this.luceneVersion = version.luceneVersion();
+		this.minimumIndexCompatibilityVersion= version.minimumIndexCompatibilityVersion();
+		this.minimumWireCompatibilityVersion = version.minimumWireCompatibilityVersion();
+		this.number = version.number();
 		convertReleaseNumberToInteger();
 	}
 
@@ -64,11 +66,11 @@ public class ElasticServerDetails {
 	}
 
 	public String getBuildDate() {
-		return buildDate;
+		return buildDate.getString();
 	}
 
 	public void setBuildDate(String buildDate) {
-		this.buildDate = buildDate;
+		this.buildDate = DateTime.of(buildDate);
 	}
 
 	public String getBuildFlavor() {

@@ -7,11 +7,6 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLSyntaxErrorException;
 
-import org.elasticsearch.action.search.ClearScrollRequest;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.action.search.SearchScrollRequest;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.common.unit.TimeValue;
 import org.fpasti.jdbc.esqlj.Configuration;
 import org.fpasti.jdbc.esqlj.ConfigurationPropertyEnum;
 import org.fpasti.jdbc.esqlj.EsConnection;
@@ -24,6 +19,14 @@ import org.fpasti.jdbc.esqlj.elastic.query.model.PageDataState;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementSelect;
 import org.fpasti.jdbc.esqlj.support.ElasticUtils;
 import org.fpasti.jdbc.esqlj.support.EsRuntimeException;
+
+import co.elastic.clients.elasticsearch._types.Time;
+import co.elastic.clients.elasticsearch.core.ClearScrollRequest;
+import co.elastic.clients.elasticsearch.core.ScrollRequest;
+import co.elastic.clients.elasticsearch.core.ScrollResponse;
+import co.elastic.clients.elasticsearch.core.SearchRequest;
+import co.elastic.clients.elasticsearch.core.SearchResponse;
+import co.elastic.clients.elasticsearch.core.search.ResponseBody;
 
 /**
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
@@ -48,8 +51,12 @@ public class ElasticQuery extends AbstractQuery {
 			requestInstance = RequestBuilder.buildRequest(getConnection(), select, fetchSize);
 			
 			pageData = new PageDataElastic(getSource(), requestInstance);
+			
+			SearchRequest searchRequest = requestInstance.getSearchRequest();
+			
+			System.out.println("request data= " + searchRequest.toString());
 				
-			SearchResponse searchResponse = getConnection().getElasticClient().search(requestInstance.getSearchRequest(), RequestOptions.DEFAULT);
+			SearchResponse<?> searchResponse = getConnection().getElasticClient().search(searchRequest, Object.class);
 			pageData.pushData(searchResponse);
 			requestInstance.updateRequest(searchResponse, pageData);
 			rsEmpty = pageData.isEmpty();
@@ -79,24 +86,25 @@ public class ElasticQuery extends AbstractQuery {
 	}
 
 	private void paginateByScrollApi() throws IOException, SQLException {
-		SearchScrollRequest scrollRequest = new SearchScrollRequest(requestInstance.getPaginationId());
-		scrollRequest.scroll(TimeValue.timeValueMinutes(Configuration.getConfiguration(ConfigurationPropertyEnum.CFG_QUERY_SCROLL_TIMEOUT_MINUTES, Long.class)));
-		SearchResponse searchResponse = getConnection().getElasticClient().scroll(scrollRequest, RequestOptions.DEFAULT);
+		Long configuration = Configuration.getConfiguration(ConfigurationPropertyEnum.CFG_QUERY_SCROLL_TIMEOUT_MINUTES, Long.class);
+		ScrollRequest scrollRequest = new ScrollRequest.Builder().scrollId(requestInstance.getPaginationId())
+				.scroll(new Time.Builder().time(String.format("%dm", configuration)).build()).build();
+		ScrollResponse<?> searchResponse = getConnection().getElasticClient().scroll(scrollRequest, Object.class);
 		pageData.pushData(searchResponse);
 		requestInstance.updateRequest(searchResponse, pageData);
 		clearScrollIfRequired(searchResponse);
 	}
 
 	private void paginateByOrder() throws IOException, SQLException {
-		SearchResponse searchResponse = getConnection().getElasticClient().search(requestInstance.getSearchRequest(), RequestOptions.DEFAULT);
+		SearchResponse<?> searchResponse = getConnection().getElasticClient().search(requestInstance.getSearchRequest(), Object.class);
 		pageData.pushData(searchResponse);
 		requestInstance.updateRequest(searchResponse, pageData);
 		rsEmpty = pageData.isEmpty();
 		clearScrollIfRequired(searchResponse);
 	}
 
-	private void clearScrollIfRequired(SearchResponse response) throws SQLException {
-		if(response.getHits().getHits().length < fetchSize) {
+	private void clearScrollIfRequired(ResponseBody<?> response) throws SQLException {
+		if(response.hits().hits().size() < fetchSize) {
 			clearScroll();
 		}
 	}
@@ -123,9 +131,10 @@ public class ElasticQuery extends AbstractQuery {
 	}
 
 	private void clearPaginationByScrollApi() throws IOException {
-		ClearScrollRequest clearScrollRequest = new ClearScrollRequest(); 
-		clearScrollRequest.addScrollId(requestInstance.getPaginationId());
-		getConnection().getElasticClient().clearScroll(clearScrollRequest, RequestOptions.DEFAULT);
+		if (requestInstance.getPaginationId() != null) {
+			ClearScrollRequest clearScrollRequest = new ClearScrollRequest.Builder().scrollId(requestInstance.getPaginationId()).build(); 
+			getConnection().getElasticClient().clearScroll(clearScrollRequest);
+		}
 	}
 
 	@Override

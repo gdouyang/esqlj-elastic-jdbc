@@ -27,7 +27,7 @@ import org.fpasti.jdbc.esqlj.EsDriver;
 public class TestUtils {
 	
 	public static final String ENV_PROP_ESQLJ_TEST_CONFIG = "ESQLJ_TEST_CONFIG";
-	private static final String SETUP_MODE_CREATE_AND_DESTROY = "createAndDestroy	"; 
+	private static final String SETUP_MODE_CREATE_AND_DESTROY = "createAndDestroy"; 
 	private static final String SETUP_MODE_CREATE_ONLY = "createOnly";
 	
 	private static EsConnection connection;
@@ -131,6 +131,15 @@ public class TestUtils {
 			stream.forEach(s -> contentBuilder.append(s).append("\n"));
 		} 
         return contentBuilder.toString();
+	}
+	public static String readFile(String path) throws IOException {
+		URL pathUrl = TestUtils.class.getClassLoader().getResource(path);
+		File file = new File(pathUrl.getPath());
+		StringBuilder contentBuilder = new StringBuilder();
+		try (Stream<String> stream = Files.lines(Paths.get(file.getPath()), StandardCharsets.UTF_8)) {
+			stream.forEach(s -> contentBuilder.append(s).append("\n"));
+		} 
+		return contentBuilder.toString();
 	}
 	
 	public static String getURL() {

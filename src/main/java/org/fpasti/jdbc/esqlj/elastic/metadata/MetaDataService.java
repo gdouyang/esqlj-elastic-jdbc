@@ -10,16 +10,18 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.core.MainResponse;
-import org.elasticsearch.client.indices.GetFieldMappingsRequest;
-import org.elasticsearch.client.indices.GetFieldMappingsResponse;
 import org.fpasti.jdbc.esqlj.Configuration;
 import org.fpasti.jdbc.esqlj.ConfigurationPropertyEnum;
-import org.fpasti.jdbc.esqlj.elastic.model.ElasticObject;
 import org.fpasti.jdbc.esqlj.elastic.model.ElasticFieldType;
+import org.fpasti.jdbc.esqlj.elastic.model.ElasticObject;
 import org.fpasti.jdbc.esqlj.elastic.model.IndexMetaData;
+
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.mapping.FieldMapping;
+import co.elastic.clients.elasticsearch._types.mapping.Property;
+import co.elastic.clients.elasticsearch.core.InfoResponse;
+import co.elastic.clients.elasticsearch.indices.GetFieldMappingRequest;
+import co.elastic.clients.elasticsearch.indices.GetFieldMappingResponse;
 
 /**
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
@@ -27,17 +29,17 @@ import org.fpasti.jdbc.esqlj.elastic.model.IndexMetaData;
 
 public class MetaDataService {
 	private ElasticServerDetails elasticServerDetails;
-	private RestHighLevelClient client;
+	private ElasticsearchClient client;
 	private Map<String, IndexMetaData> cacheIndexMetaData = new HashMap<String, IndexMetaData>();
 	
-	public MetaDataService(RestHighLevelClient client) throws SQLException {
+	public MetaDataService(ElasticsearchClient client) throws SQLException {
 		this.client = client;
 		retrieveElasticInfo();
 	}
 
 	private void retrieveElasticInfo() throws SQLException {
 		try {
-			MainResponse response = client.info(RequestOptions.DEFAULT);
+			InfoResponse response = client.info();
 			
 			setElasticServerDetails(new ElasticServerDetails(response));
 			
@@ -72,36 +74,42 @@ public class MetaDataService {
 		return new IndexMetaData(index, getIndexFields(index));
 	}
 	
-	@SuppressWarnings("unchecked")
 	public Map<String, ElasticObject> getIndexFields(String index) throws SQLException {
 		try {
-			GetFieldMappingsRequest request = new GetFieldMappingsRequest();
-			request.indices(index);
-			request.fields("*");
+			GetFieldMappingRequest request = new GetFieldMappingRequest.Builder().index(index).fields("*").build();
 			
-			GetFieldMappingsResponse response = client.indices().getFieldMapping(request, RequestOptions.DEFAULT);
+			GetFieldMappingResponse response = client.indices().getFieldMapping(request);
 	
 			Map<String, ElasticObject> fields = new TreeMap<String, ElasticObject>();
 			List<String> managedFields = new ArrayList<String>();
-			
-			response.mappings().entrySet().stream().map(entry -> entry.getValue()).forEach(iMap -> {
-				iMap.forEach((field, metadata) -> {
-					Map<String, Object> metadataMap = metadata.sourceAsMap();
+			response.result().forEach((indexName, metadata) -> {
+				Map<String, FieldMapping> mappings = metadata.mappings();
+				mappings.forEach((field, fm) -> {
+					Map<String, Property> metadataMap = fm.mapping();
 					if(metadataMap.size() > 0 && !managedFields.stream().anyMatch(field::equals)) {
-						Map<String, Object> fieldMap = (Map<String, Object>)metadataMap.get(field.substring(field.lastIndexOf('.') + 1));
-
-						ElasticFieldType fieldType = ElasticFieldType.resolveByElasticType((String)fieldMap.get("type"));
-						fields.put(field, new ElasticObject(
-								field, 
-								fieldType,
-								fieldMap.get("ignore_above") != null ? new Long((Integer)fieldMap.get("ignore_above")) : null,
-								fieldMap.get("doc_values") != null ? (boolean)fieldMap.get("doc_values") : isDocValue(fieldType)));
+						Property fieldMap = metadataMap.get(field.substring(field.lastIndexOf('.') + 1));
+						ElasticFieldType fieldType = ElasticFieldType.resolveByElasticType(fieldMap._kind().jsonValue());
+						
+						ElasticObject elasticObject = new ElasticObject(field, fieldType, null, isDocValue(fieldType));
+						if (fieldMap.isKeyword()) {
+							Boolean docValues = fieldMap.keyword().docValues();
+							if (docValues != null) {
+								elasticObject.setDocValue(docValues);
+							}
+							Integer ignoreAbove = fieldMap.keyword().ignoreAbove();
+							if (ignoreAbove != null) {
+								elasticObject.setSize(ignoreAbove.longValue());
+							}
+						}
+						fields.put(field, elasticObject);
 						managedFields.add(field);
-					}			
+					}
 				});
 			});
 			
-			return fields.entrySet().stream().sorted(Map.Entry.comparingByKey()).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,(oldValue, newValue) -> oldValue, LinkedHashMap::new));
+			return fields.entrySet().stream()
+					.sorted(Map.Entry.comparingByKey())
+					.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,(oldValue, newValue) -> oldValue, LinkedHashMap::new));
 		} catch(IOException e) {
 			throw new SQLException(e.getMessage());
 		}

@@ -1,19 +1,26 @@
 package org.fpasti.jdbc.esqlj.elastic.query.impl.search.clause.select;
 
 import java.sql.SQLSyntaxErrorException;
-
-import org.elasticsearch.script.Script;
-import org.elasticsearch.search.aggregations.AggregationBuilders;
-import org.elasticsearch.search.aggregations.BucketOrder;
-import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.fpasti.jdbc.esqlj.Configuration;
 import org.fpasti.jdbc.esqlj.ConfigurationPropertyEnum;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.RequestInstance;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.clause.ClauseHaving;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementSelect;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryColumn;
-
+import co.elastic.clients.elasticsearch._types.InlineScript;
+import co.elastic.clients.elasticsearch._types.Script;
+import co.elastic.clients.elasticsearch._types.SortOrder;
+import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.AverageAggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.CardinalityAggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.MaxAggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.MinAggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.SumAggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.TermsAggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.ValueCountAggregation;
+import co.elastic.clients.elasticsearch.core.SearchRequest;
+import co.elastic.clients.elasticsearch.core.SearchRequest.Builder;
+import co.elastic.clients.util.NamedValue;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.select.OrderByElement;
 
@@ -40,7 +47,7 @@ public class AggregationBuilder {
 	}
 
 	private static void manageUngroupedExpression(RequestInstance req) throws SQLSyntaxErrorException {
-		SearchSourceBuilder builder = req.getSearchSourceBuilder();
+		Builder builder = req.getSearchSourceBuilder();
 		for(Integer idx = 0; idx < req.getSelect().getQueryColumns().size(); idx++) {
 			QueryColumn queryColumn = req.getSelect().getQueryColumns().get(idx);
 			addGroupingFunction(queryColumn, idx.toString(), req.getSelect(), null, builder);
@@ -48,85 +55,119 @@ public class AggregationBuilder {
 	}
 
 	public static void manageGroupByExpressions(RequestInstance req) throws SQLSyntaxErrorException {
-		SearchSourceBuilder builder = req.getSearchSourceBuilder();
-		TermsAggregationBuilder currentTermsAggregationBuilder = null;
-		
+		Builder builder = req.getSearchSourceBuilder();
+		TermsAggregationBuilderWrapper firstTermsAggregationBuilder = null;
+		TermsAggregationBuilderWrapper currentTermsAggregationBuilder = null;
+		String firstPosition = null;
 		for(String column : req.getSelect().getGroupByColumns()) {
-			TermsAggregationBuilder tab = AggregationBuilders.terms(getPositionInClauseSelect(req.getSelect(), column)).field(column).size(Configuration.getConfiguration(ConfigurationPropertyEnum.CFG_MAX_GROUP_BY_RETRIEVED_ELEMENTS, Integer.class));
+		    String positionInClauseSelect = getPositionInClauseSelect(req.getSelect(), column);
+		    TermsAggregation.Builder tab = new TermsAggregation.Builder()
+              .field(column)
+              .size(Configuration.getConfiguration(ConfigurationPropertyEnum.CFG_MAX_GROUP_BY_RETRIEVED_ELEMENTS, Integer.class));
 			
 			manageOrdering(column, tab, req.getSelect());
 			
-			if(currentTermsAggregationBuilder == null) {
-				builder.aggregation(tab);
-			} else {
-				currentTermsAggregationBuilder.subAggregation(tab);
-			}
-			currentTermsAggregationBuilder = tab;
+			TermsAggregationBuilderWrapper b = new TermsAggregationBuilderWrapper(tab);
+			if(firstTermsAggregationBuilder == null) {
+			  firstTermsAggregationBuilder = b;
+              firstPosition = positionInClauseSelect;
+            } else {
+              currentTermsAggregationBuilder.aggregations(positionInClauseSelect, tab);
+            }
+			currentTermsAggregationBuilder = b;
 		}
 		
-		final TermsAggregationBuilder deeperTermsAggregationBuilder = currentTermsAggregationBuilder;
-	
+		final TermsAggregationBuilderWrapper deeperTermsAggregationBuilder = currentTermsAggregationBuilder;
 		for(Integer i = 0; i < req.getSelect().getQueryColumns().size(); i++) {
 			QueryColumn column = req.getSelect().getQueryColumns().get(i);
 			if(column.getAggregatingFunctionExpression() != null) {
-				addGroupingFunction(column, i.toString(), req.getSelect(), deeperTermsAggregationBuilder, null);
+				addGroupingFunction(column, i.toString(), req.getSelect(), deeperTermsAggregationBuilder, builder);
 			}
 		}
 		
 		if(req.getSelect().getHavingCondition() != null) {
 			ClauseHaving.manageHavingCondition(req.getSelect(), deeperTermsAggregationBuilder);
 		}
+		builder.aggregations(firstPosition, currentTermsAggregationBuilder.build());
 	}
 	
 	private static void manageDistinctColumns(RequestInstance req) {
-		SearchSourceBuilder builder = req.getSearchSourceBuilder();
-		TermsAggregationBuilder currentTermsAggregationBuilder = null;
-		
+	    SearchRequest.Builder builder = req.getSearchSourceBuilder();
+	    
+	    TermsAggregationBuilderWrapper firstTermsAggregationBuilder = null;
+	    TermsAggregationBuilderWrapper currentTermsAggregationBuilder = null;
 		for(QueryColumn queryColumn : req.getSelect().getQueryColumns()) {
-			TermsAggregationBuilder tab = AggregationBuilders.terms(getPositionInClauseSelect(req.getSelect(), queryColumn.getName())).field(queryColumn.getName()).size(Configuration.getConfiguration(ConfigurationPropertyEnum.CFG_MAX_GROUP_BY_RETRIEVED_ELEMENTS, Integer.class));
+		  String positionInClauseSelect = getPositionInClauseSelect(req.getSelect(), queryColumn.getName());
+		  TermsAggregation.Builder tab = new TermsAggregation.Builder()
+		      .field(queryColumn.getName())
+		      .size(Configuration.getConfiguration(ConfigurationPropertyEnum.CFG_MAX_GROUP_BY_RETRIEVED_ELEMENTS, Integer.class));
 			
 			manageOrdering(queryColumn.getName(), tab, req.getSelect());
 			
-			if(currentTermsAggregationBuilder == null) {
-				builder.aggregation(tab);
+			TermsAggregationBuilderWrapper b = new TermsAggregationBuilderWrapper(tab);
+			if(firstTermsAggregationBuilder == null) {
+			  firstTermsAggregationBuilder = b;
 			} else {
-				currentTermsAggregationBuilder.subAggregation(tab);
+			    currentTermsAggregationBuilder.aggregations(positionInClauseSelect, tab);
 			}
-			currentTermsAggregationBuilder = tab;
+			currentTermsAggregationBuilder = b;
 		}
+		builder.aggregations("0", firstTermsAggregationBuilder.build());
 	}
 
-	private static void manageOrdering(String columnName, TermsAggregationBuilder termsAggregation, SqlStatementSelect select) {
+	private static void manageOrdering(String columnName, TermsAggregation.Builder termsAggregation, SqlStatementSelect select) {
 		OrderByElement orderByElement = select.getOrderByElements().stream().filter(orderBy -> ((Column)orderBy.getExpression()).getColumnName().equalsIgnoreCase(columnName)).findFirst().orElse(null);
 		if(orderByElement != null) {
-			termsAggregation.order(BucketOrder.key(orderByElement.isAsc()));
+		    NamedValue<SortOrder> of = NamedValue.of("_term", orderByElement.isAsc() ? SortOrder.Asc : SortOrder.Desc);
+			termsAggregation.order(of);
 		}
 	}
 
-	private static void addGroupingFunction(QueryColumn column, String columnPosition, SqlStatementSelect select, TermsAggregationBuilder termsAggregation, SearchSourceBuilder builder) throws SQLSyntaxErrorException {
-		org.elasticsearch.search.aggregations.AggregationBuilder aggregationBuilder = null;
+	private static void addGroupingFunction(QueryColumn column, String columnPosition, SqlStatementSelect select, TermsAggregationBuilderWrapper termsAggregation, SearchRequest.Builder builder) throws SQLSyntaxErrorException {
+		Aggregation aggregationBuilder = null;
 		
 		switch(column.getFunctionType()) {
 			case AVG:
-				aggregationBuilder = AggregationBuilders.avg(columnPosition).field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+				aggregationBuilder = AverageAggregation.of(b -> {
+					b.field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+					return b;
+				})._toAggregation();
 				break;
 			case COUNT:
 				if(column.getAggregatingFunctionExpression().isAllColumns()) {
-					aggregationBuilder = AggregationBuilders.count(columnPosition).script(new Script("1"));
+					aggregationBuilder = ValueCountAggregation.of(b -> {
+						b.script(new Script.Builder().inline(new InlineScript.Builder().source("1").build()).build());
+						return b;
+					})._toAggregation();
 				} else if(column.getAggregatingFunctionExpression().isDistinct()) {
-					aggregationBuilder = AggregationBuilders.cardinality(columnPosition).field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+					aggregationBuilder = CardinalityAggregation.of(b -> {
+						b.field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+						return b;
+					})._toAggregation();
 				} else {
-					aggregationBuilder = AggregationBuilders.count(columnPosition).field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+					aggregationBuilder = ValueCountAggregation.of(b -> {
+						b.field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+						return b;
+					})._toAggregation();
 				}
 				break;
 			case MAX:
-				aggregationBuilder = AggregationBuilders.max(columnPosition).field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+				aggregationBuilder = MaxAggregation.of(b -> {
+					b.field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+					return b;
+				})._toAggregation();
 				break;
 			case MIN:
-				aggregationBuilder = AggregationBuilders.min(columnPosition).field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+				aggregationBuilder = MinAggregation.of(b -> {
+					b.field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+					return b;
+				})._toAggregation();
 				break;
 			case SUM:
-				aggregationBuilder = AggregationBuilders.sum(columnPosition).field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+				aggregationBuilder = SumAggregation.of(b -> {
+					b.field(stripDoubleQuotes(column.getAggregatingFunctionExpression().getParameters().getExpressions().get(0).toString()));
+					return b;
+				})._toAggregation();
 				break;
 			default:
 				throw new SQLSyntaxErrorException(String.format("Expression %s unsupported", column.getAggregatingFunctionExpression().getName()));
@@ -134,14 +175,15 @@ public class AggregationBuilder {
 		
 		if(aggregationBuilder != null) {
 			if(termsAggregation != null) {
-				termsAggregation.subAggregation(aggregationBuilder);
+				termsAggregation.aggregations(columnPosition, aggregationBuilder);
 				
 				OrderByElement orderByElement = select.getOrderByElements().stream().filter(orderBy -> ((Column)orderBy.getExpression()).getColumnName().equalsIgnoreCase(column.getName()) || ((Column)orderBy.getExpression()).getColumnName().equalsIgnoreCase(column.getAlias())).findFirst().orElse(null);
 				if(orderByElement != null) {
-					termsAggregation.order(BucketOrder.aggregation(aggregationBuilder.getName(), orderByElement.isAsc()));
+					NamedValue<SortOrder> of = NamedValue.of(columnPosition, orderByElement.isAsc() ? SortOrder.Asc : SortOrder.Desc);
+		            termsAggregation.order(of);
 				}
 			} else {
-				builder.aggregation(aggregationBuilder);
+			    builder.aggregations(columnPosition, aggregationBuilder);
 			}
 		}
 	}

@@ -4,16 +4,21 @@ import java.sql.SQLException;
 import java.sql.SQLSyntaxErrorException;
 
 import org.fpasti.jdbc.esqlj.EsConnection;
+import org.fpasti.jdbc.esqlj.elastic.query.impl.ElasticDelete;
+import org.fpasti.jdbc.esqlj.elastic.query.impl.ElasticDrop;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.ElasticQuery;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatement;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementDelete;
+import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementDrop;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementInsert;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementSelect;
-import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementType;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementUpdate;
 
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.delete.Delete;
+import net.sf.jsqlparser.statement.drop.Drop;
+import net.sf.jsqlparser.statement.select.Select;
 
 /**
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
@@ -21,45 +26,27 @@ import net.sf.jsqlparser.statement.Statement;
 
 public class Executor {
 	
-	public static ElasticQuery execSql(EsConnection connection, String sql) throws SQLException {
-		try {
-			return new ElasticQuery(connection, (SqlStatementSelect)parseQuery(sql, SqlStatementType.SELECT));
-		} catch(SQLException se) {
-			throw se;
-		} catch (Exception e) {
-			throw new SQLException(e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
-		}
-	}
-	
-	private static SqlStatement parseQuery(String sql, SqlStatementType requiredType) throws SQLSyntaxErrorException {
+	public static AbstractQuery execSql(EsConnection connection, String sql) throws SQLException {
 		try {
 			Statement statement =  CCJSqlParserUtil.parse(sql);
 			switch(statement.getClass().getSimpleName()) {
-				case "Select":
-					if(requiredType != null && requiredType != SqlStatementType.SELECT) {
-						throw new SQLSyntaxErrorException("Not an SELECT statement");
-					}
-					return new SqlStatementSelect(statement);
-				case "Update":
-					if(requiredType != null && requiredType != SqlStatementType.UPDATE) {
-						throw new SQLSyntaxErrorException("Not an UPDATE statement");
-					}
-					return new SqlStatementUpdate(statement);
-				case "Insert":
-					if(requiredType != null && requiredType != SqlStatementType.INSERT) {
-						throw new SQLSyntaxErrorException("Not an INSERT statement");
-					}
-					return new SqlStatementInsert(statement);
-				case "Delete":
-					if(requiredType != null && requiredType != SqlStatementType.DELETE) {
-						throw new SQLSyntaxErrorException("Not an DELETE statement");
-					}
-					return new SqlStatementDelete(statement);
-				default:
-					throw new SQLSyntaxErrorException("Unrecognized statement");
+			case "Select":
+				return new ElasticQuery(connection, new SqlStatementSelect((Select)statement));
+//			case "Update":
+//				return new ElasticUpdate(connection, new SqlStatementUpdate(statement));
+//			case "Insert":
+//				return new SqlStatementInsert(statement);
+			case "Delete":
+				return new ElasticDelete(connection, new SqlStatementDelete((Delete)statement));
+			case "Drop":
+				return new ElasticDrop(connection, new SqlStatementDrop((Drop)statement));
+			default:
+				throw new SQLSyntaxErrorException("Unrecognized statement [" + statement.getClass().getSimpleName() + "]");
 			}
+		} catch(SQLException se) {
+			throw se;
 		} catch(Exception e) {
-			throw new SQLSyntaxErrorException(e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+			throw new SQLSyntaxErrorException(e.getCause() != null ? e.getCause().getMessage() : e.getMessage(), e);
 		}
 	}
 	

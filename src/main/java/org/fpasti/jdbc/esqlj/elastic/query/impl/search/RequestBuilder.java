@@ -2,9 +2,6 @@ package org.fpasti.jdbc.esqlj.elastic.query.impl.search;
 
 import java.sql.SQLException;
 import java.sql.SQLNonTransientConnectionException;
-
-import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.search.builder.PointInTimeBuilder;
 import org.fpasti.jdbc.esqlj.Configuration;
 import org.fpasti.jdbc.esqlj.ConfigurationPropertyEnum;
 import org.fpasti.jdbc.esqlj.EsConnection;
@@ -14,6 +11,8 @@ import org.fpasti.jdbc.esqlj.elastic.query.impl.search.clause.select.ClauseSelec
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementSelect;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryType;
 import org.fpasti.jdbc.esqlj.support.ElasticUtils;
+import co.elastic.clients.elasticsearch._types.Time;
+import co.elastic.clients.elasticsearch.core.search.PointInTimeReference;
 
 /**
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
@@ -35,20 +34,24 @@ public class RequestBuilder {
 
 	private static void build(EsConnection connection, RequestInstance req, SqlStatementSelect select) throws SQLNonTransientConnectionException {
 		if(select.getQueryType().equals(QueryType.DOCS)) {
-			req.getSearchSourceBuilder().size(select.getLimit() != null ? (select.getLimit() > req.getFetchSize() ? req.getFetchSize() : select.getLimit().intValue()) : req.getFetchSize());
+			int size = select.getLimit() != null ? (select.getLimit() > req.getFetchSize() ? req.getFetchSize() : select.getLimit().intValue()) : req.getFetchSize();
+			req.getSearchSourceBuilder().size(size);
 		}
 		
-		req.getSearchRequest().source(req.getSearchSourceBuilder());
-		
+		Long configuration = Configuration.getConfiguration(ConfigurationPropertyEnum.CFG_QUERY_SCROLL_TIMEOUT_MINUTES, Long.class);
+		Time time = new Time.Builder().time(String.format("%dm", configuration)).build();
 		switch(req.getPaginationMode()) {
 			case SCROLL_API:
-				req.getSearchRequest().scroll(TimeValue.timeValueMinutes(Configuration.getConfiguration(ConfigurationPropertyEnum.CFG_QUERY_SCROLL_TIMEOUT_MINUTES, Long.class)));
+			    req.getSearchSourceBuilder().scroll(time);
 				break;
 			case BY_ORDER_WITH_PIT:
-				req.getSearchRequest().setMaxConcurrentShardRequests(6); // enable work around
-				PointInTimeBuilder pit = new PointInTimeBuilder(ElasticUtils.getPointInTime(connection, req));
-				pit.setKeepAlive(TimeValue.timeValueMinutes(Configuration.getConfiguration(ConfigurationPropertyEnum.CFG_QUERY_SCROLL_TIMEOUT_MINUTES, Long.class)));
-				req.getSearchSourceBuilder().pointInTimeBuilder(pit);
+				req.getSearchSourceBuilder().maxConcurrentShardRequests(6L); // enable work around
+			  
+                PointInTimeReference pit = new PointInTimeReference.Builder()
+                    .id(ElasticUtils.getPointInTime(connection, req))
+                    .keepAlive(time)
+                    .build();
+                req.getSearchSourceBuilder().pit(pit);
 				break;
 			default:
 		}

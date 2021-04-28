@@ -4,19 +4,16 @@ import java.sql.SQLSyntaxErrorException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.Index;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryColumn;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryType;
 import org.fpasti.jdbc.esqlj.support.EsRuntimeException;
 import org.fpasti.jdbc.esqlj.support.EsWrapException;
-
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
-import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.AllColumns;
 import net.sf.jsqlparser.statement.select.Join;
 import net.sf.jsqlparser.statement.select.OrderByElement;
@@ -28,7 +25,7 @@ import net.sf.jsqlparser.statement.select.SelectExpressionItem;
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
 */
 
-public class SqlStatementSelect extends SqlStatement {
+public class SqlStatementSelect extends SqlStatement implements IWhereCondition {
 
 	private PlainSelect select;
 	private List<Index> indices;
@@ -37,9 +34,9 @@ public class SqlStatementSelect extends SqlStatement {
 	private List<String> groupByColumns;
 	private QueryType queryType = QueryType.DOCS;
 	
-	public SqlStatementSelect(Statement statement) {
+	public SqlStatementSelect(Select statement) {
 		super(SqlStatementType.SELECT);
-		select = (PlainSelect)((Select)statement).getSelectBody();
+		select = (PlainSelect)statement.getSelectBody();
 		
 		init();
 	}

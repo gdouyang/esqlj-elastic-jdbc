@@ -102,6 +102,13 @@ public class EsResultSet implements ResultSet {
 
 	@Override
 	public float getFloat(int columnIndex) throws SQLException {
+		Object columnValue = getColumnValue(columnIndex, Object.class, null);
+		if (columnValue == null) {
+			return 0.0f;
+		}
+		if (columnValue instanceof Number) {
+			return ((Number)columnValue).floatValue();
+		}
 		return getColumnValue(columnIndex, Float.class, (float)0.0);
 	}
 

@@ -8,5 +8,6 @@ public enum SqlStatementType {
 	SELECT,
 	UPDATE,
 	INSERT,
-	DELETE
+	DELETE,
+	DROP
 }

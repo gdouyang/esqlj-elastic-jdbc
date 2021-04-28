@@ -17,6 +17,10 @@ import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementSelect;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryColumn;
 import org.fpasti.jdbc.esqlj.support.EsRuntimeException;
 
+import co.elastic.clients.elasticsearch._types.query_dsl.FieldAndFormat;
+import co.elastic.clients.elasticsearch.core.search.SourceConfig;
+import co.elastic.clients.elasticsearch.core.search.SourceFilter;
+
 /**
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
 */
@@ -55,12 +59,12 @@ public class ClauseSelect {
 					sourceFields.add(field.getFullName());
 				}
 			} else if(!field.getFullName().equals(ElasticObject.DOC_ID_ALIAS)) {
-				req.getSearchSourceBuilder().docValueField(field.getFullName());
+				req.getSearchSourceBuilder().docvalueFields(new FieldAndFormat.Builder().field(field.getFullName()).build());
 			} 
 		});
 		
 		if(sourceFields != null) {
-			req.getSearchSourceBuilder().fetchSource(sourceFields.toArray(new String[sourceFields.size()]), null);
+			req.getSearchSourceBuilder().source(new SourceConfig.Builder().filter(new SourceFilter.Builder().includes(sourceFields).build()).build());
 		}
 	}
 	

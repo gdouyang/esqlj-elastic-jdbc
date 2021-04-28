@@ -9,12 +9,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.indices.GetIndexRequest;
-import org.elasticsearch.client.indices.GetIndexResponse;
 import org.fpasti.jdbc.esqlj.EsConnection;
 import org.fpasti.jdbc.esqlj.elastic.model.ElasticSearchableType;
 import org.fpasti.jdbc.esqlj.elastic.query.AbstractOneShotQuery;
+
+import co.elastic.clients.elasticsearch.indices.GetAliasRequest;
+import co.elastic.clients.elasticsearch.indices.GetAliasResponse;
+import co.elastic.clients.elasticsearch.indices.GetIndexRequest;
+import co.elastic.clients.elasticsearch.indices.GetIndexResponse;
 
 /**
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
@@ -49,9 +51,9 @@ public class IndicesQuery extends AbstractOneShotQuery {
 	
 	private List<String> retrieveIndices() throws SQLException {
 		try {
-			GetIndexRequest indexRequest = new GetIndexRequest("*");
-			GetIndexResponse indexResponse = getConnection().getElasticClient().indices().get(indexRequest, RequestOptions.DEFAULT);
-			List<String> indices = new ArrayList<String>(Arrays.asList(indexResponse.getIndices()));
+			GetIndexRequest indexRequest = new GetIndexRequest.Builder().index("*").build();
+			GetIndexResponse indexResponse = getConnection().getElasticClient().indices().get(indexRequest);
+			List<String> indices = new ArrayList<String>(indexResponse.result().keySet());
 			return indices.stream().sorted().collect(Collectors.toList());
 		} catch(IOException e) {
 			throw new SQLException("Failed to retrieve indices and aliases from Elastic");
@@ -60,9 +62,9 @@ public class IndicesQuery extends AbstractOneShotQuery {
 
 	private List<String> retrieveAliases() throws SQLException {
 		try {
-			GetIndexRequest indexRequest = new GetIndexRequest("*");
-			GetIndexResponse indexResponse = getConnection().getElasticClient().indices().get(indexRequest, RequestOptions.DEFAULT);
-			List<String> aliases = new ArrayList<String>(indexResponse.getAliases().values().stream().flatMap(val ->  val.stream().map(alias -> alias.alias())).collect(Collectors.toSet()));
+			GetAliasRequest indexRequest = new GetAliasRequest.Builder().index("*").build();
+			GetAliasResponse indexResponse = getConnection().getElasticClient().indices().getAlias(indexRequest);
+			List<String> aliases = new ArrayList<String>(indexResponse.result().keySet());
 			return aliases.stream().sorted().collect(Collectors.toList());
 		} catch(IOException e) {
 			throw new SQLException("Failed to retrieve indices and aliases from Elastic");

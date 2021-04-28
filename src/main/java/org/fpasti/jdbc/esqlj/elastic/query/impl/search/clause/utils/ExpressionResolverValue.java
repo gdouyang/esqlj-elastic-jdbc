@@ -3,6 +3,7 @@ package org.fpasti.jdbc.esqlj.elastic.query.impl.search.clause.utils;
 import java.sql.SQLException;
 import java.sql.SQLSyntaxErrorException;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.stream.Collectors;
 
@@ -79,22 +80,23 @@ public class ExpressionResolverValue {
 				if(parameters.getExpressions().size() != 2) {
 					throw new EsWrapException(new SQLSyntaxErrorException("TO_DATE with invalid number of parameters"));
 				}
-				return DateUtils.resolveToDate((String)evaluateValueExpression(parameters.getExpressions().get(0)), (String)evaluateValueExpression(parameters.getExpressions().get(1)));
+				LocalDateTime resolveToDate = DateUtils.resolveToDate((String)evaluateValueExpression(parameters.getExpressions().get(0)), (String)evaluateValueExpression(parameters.getExpressions().get(1)));
+				return resolveToDate.toInstant(OffsetDateTime.now().getOffset()).toEpochMilli();
 			case "NOW":
 			case "GETDATE":
 			case "CURDATE":
 			case "SYSDATE":
-				return LocalDateTime.now(ZoneId.systemDefault());
+				return LocalDateTime.now(ZoneId.systemDefault()).toInstant(OffsetDateTime.now().getOffset()).toEpochMilli();
 			case "TRUNC":
 				if(parameters.getExpressions().get(0) instanceof Column && ((Column)parameters.getExpressions().get(0)).getColumnName().equalsIgnoreCase("SYSDATE")) {
-					return LocalDateTime.now(ZoneId.systemDefault());
+					return LocalDateTime.now(ZoneId.systemDefault()).toInstant(OffsetDateTime.now().getOffset()).toEpochMilli();
 				} else if(parameters.getExpressions().get(0) instanceof Function) {
 					Function nestedFunction = (Function)parameters.getExpressions().get(0);
 					if(nestedFunction.getName().equalsIgnoreCase("SYSDATE")  
 							|| nestedFunction.getName().equalsIgnoreCase("GETDATE")
 							|| nestedFunction.getName().equalsIgnoreCase("CURDATE")
 							|| nestedFunction.getName().equalsIgnoreCase("NOW")) {
-						return LocalDateTime.now(ZoneId.systemDefault());
+						return LocalDateTime.now(ZoneId.systemDefault()).toInstant(OffsetDateTime.now().getOffset()).toEpochMilli();
 					}
 				}
 				throw new EsWrapException(new SQLSyntaxErrorException(String.format("'%s' unsupported", function.toString())));

@@ -24,9 +24,14 @@ import java.util.Properties;
 import java.util.concurrent.Executor;
 
 import org.apache.http.HttpHost;
-import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
-import org.elasticsearch.client.RestHighLevelClient;
+
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import co.elastic.clients.transport.ElasticsearchTransport;
+import co.elastic.clients.transport.rest_client.RestClientTransport;
 
 /**
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
@@ -34,10 +39,10 @@ import org.elasticsearch.client.RestHighLevelClient;
 
 public class EsConnection implements Connection {
 
-	private RestHighLevelClient client;
+	private ElasticsearchClient client;
 	private EsMetaData esMetaData;
 
-	private static RestHighLevelClient sharedClient;
+	private static ElasticsearchClient sharedClient;
 	private static EsMetaData sharedEsMetaData;
 	
 	private boolean sharedConnection; 
@@ -110,7 +115,7 @@ public class EsConnection implements Connection {
 			if (Configuration.isTestMode()) {
 				return;
 			}
-			client.close();
+			client._transport().close();
 			client = null;
 		} catch (IOException e) {
 			throw new SQLException("Failed to close: ".concat(e.getMessage()));
@@ -345,15 +350,26 @@ public class EsConnection implements Connection {
 		return 0;
 	}
 
-	public RestHighLevelClient getElasticClient() {
+	public ElasticsearchClient getElasticClient() {
 		return client;
 	}
 
 	private void openConnection() throws SQLException {
 		if((!isOpen() && !sharedConnection) || (!isOpen() && sharedConnection && !isSharedConnectionOpen())) {
-			client = new RestHighLevelClient(RestClient.builder(Configuration.getUrls().stream()
+			// Create the low-level client
+			RestClient restClient = RestClient.builder(Configuration.getUrls().stream()
 					.map(esi -> new HttpHost(esi.getServer(), esi.getPort(), esi.getProtocol().name()))
-					.toArray(HttpHost[]::new)));
+					.toArray(HttpHost[]::new)).build();
+			
+			// Create the transport with a Jackson mapper
+			JacksonJsonpMapper jacksonJsonpMapper = new JacksonJsonpMapper();
+			jacksonJsonpMapper.objectMapper().registerModule(new JavaTimeModule());
+			ElasticsearchTransport transport = new RestClientTransport(
+			    restClient, jacksonJsonpMapper);
+
+			// And create the API client
+			client = new ElasticsearchClient(transport);
+			
 			esMetaData = new EsMetaData(this);
 			if(sharedConnection) {
 				sharedClient = client;
@@ -367,7 +383,7 @@ public class EsConnection implements Connection {
 	
 	public boolean isOpen() {
 		try {
-			return client != null && client.ping(RequestOptions.DEFAULT);
+			return client != null && client.ping().value();
 		} catch (IOException e) {
 			return false;
 		}
@@ -375,7 +391,7 @@ public class EsConnection implements Connection {
 	
 	public boolean isSharedConnectionOpen() {
 		try {
-			return sharedClient != null && sharedClient.ping(RequestOptions.DEFAULT);
+			return sharedClient != null && sharedClient.ping().value();
 		} catch (IOException e) {
 			return false;
 		}

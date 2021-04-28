@@ -104,7 +104,8 @@ public class TestLiveQuerySelect
 		Statement stmt = TestUtils.getLiveConnection().createStatement();
 		ResultSet rs = stmt.executeQuery(TestUtils.resolveTestIndex("SELECT TO_CHAR(timestampField, 'YYYY/MM/DD HH:MI:SS'), keywordField AS \"keywordFieldAlias\" from testIndex WHERE keywordField='keyword01'"));
 		assertEquals(true, rs.next());
-		assertEquals("2020/05/25 10:10:20", rs.getString(1));
+//		assertEquals("2020/05/25 10:10:20", rs.getString(1));
+		assertEquals("2020/05/26 04:10:20", rs.getString(1));
 		rs.close();
 		stmt.close();
 	}

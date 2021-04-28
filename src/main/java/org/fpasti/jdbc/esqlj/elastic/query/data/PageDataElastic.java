@@ -8,17 +8,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
-
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.common.document.DocumentField;
-import org.elasticsearch.search.SearchHit;
-import org.elasticsearch.search.aggregations.Aggregation;
-import org.elasticsearch.search.aggregations.Aggregations;
-import org.elasticsearch.search.aggregations.bucket.terms.ParsedTerms;
-import org.elasticsearch.search.aggregations.bucket.terms.Terms.Bucket;
-import org.elasticsearch.search.aggregations.metrics.ParsedCardinality;
-import org.elasticsearch.search.aggregations.metrics.ParsedSingleValueNumericMetricsAggregation;
-import org.elasticsearch.search.aggregations.metrics.ValueCount;
 import org.fpasti.jdbc.esqlj.elastic.model.ElasticObject;
 import org.fpasti.jdbc.esqlj.elastic.model.EsGeoPoint;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.RequestInstance;
@@ -26,6 +15,14 @@ import org.fpasti.jdbc.esqlj.elastic.query.model.DataRow;
 import org.fpasti.jdbc.esqlj.elastic.query.model.PageDataState;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryColumn;
 import org.fpasti.jdbc.esqlj.support.SimpleDateFormatThreadSafe;
+import co.elastic.clients.elasticsearch._types.aggregations.Aggregate;
+import co.elastic.clients.elasticsearch._types.aggregations.DoubleTermsBucket;
+import co.elastic.clients.elasticsearch._types.aggregations.LongTermsBucket;
+import co.elastic.clients.elasticsearch._types.aggregations.MultiBucketAggregateBase;
+import co.elastic.clients.elasticsearch._types.aggregations.StringTermsBucket;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch.core.search.ResponseBody;
+import co.elastic.clients.json.JsonData;
 
 /**
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
@@ -47,7 +44,7 @@ public class PageDataElastic {
 		this.req = req;
 	}
 
-	public void pushData(SearchResponse searchResponse) {
+	public void pushData(ResponseBody<?> searchResponse) {
 		currentIdxCurrentRow = -1;
 		
 		switch(req.getSelect().getQueryType()) {
@@ -67,7 +64,7 @@ public class PageDataElastic {
 		}
 	}
 
-	private void pushDocuments(SearchResponse res) {
+	private void pushDocuments(ResponseBody<?> res) {
 		boolean firstPush = dataRows == null;
 			
 		if(!firstPush) {
@@ -78,25 +75,31 @@ public class PageDataElastic {
 			dataRows = new ArrayList<DataRow>();
 		}
 		
-		int takeNRows = req.getSelect().getLimit() != null ? (res.getHits().getHits().length + fetchedRows > req.getSelect().getLimit() ? new Long(req.getSelect().getLimit() - fetchedRows).intValue() : res.getHits().getHits().length) : res.getHits().getHits().length;
+		int takeNRows = req.getSelect().getLimit() != null ? (res.hits().hits().size() + fetchedRows > req.getSelect().getLimit() ? new Long(req.getSelect().getLimit() - fetchedRows).intValue() : res.hits().hits().size()) : res.hits().hits().size();
 
 		for(int i = 0; i < takeNRows; i++) {
-			SearchHit searchHit = res.getHits().getHits()[i];
+			Hit<?> searchHit = res.hits().hits().get(i);
 			List<Object> data = new ArrayList<Object>();
+			Map<String, JsonData> fields = searchHit.fields();
 			req.getFields().forEach((name, field) -> {
 				if(field.isDocValue()) {
-					DocumentField docField = searchHit.field(field.getFullName());
+				    JsonData docField = fields.get(field.getFullName());
 					if(docField != null) {
-						data.add(resolveField(field, docField.getValue())); // only first field value is managed
+					    List<?> list = docField.to(List.class);
+					    if (list != null && list.size() > 0) {
+					      data.add(resolveField(field, list.get(0))); // only first field value is managed
+					    } else {
+	                        data.add(null);
+	                    }
 					} else {
 						data.add(null);
 					}
 				} else if(field.isSourceField() && req.isSourceFieldsToRetrieve()) {
-					data.add(searchHit.getSourceAsMap().get(field.getFullName()));
+					data.add(((Map)searchHit.source()).get(field.getFullName()));
 				} else if(field.getFullName().equals(ElasticObject.DOC_ID_ALIAS)) {
-					data.add(searchHit.getId());
+					data.add(searchHit.id());
 				} else if(field.getFullName().equals(ElasticObject.DOC_SCORE)) {
-					data.add(searchHit.getScore());
+					data.add(searchHit.score());
 				} else {
 					data.add(null);
 				}
@@ -108,22 +111,22 @@ public class PageDataElastic {
 		state = state == PageDataState.NOT_INITIALIZED ? PageDataState.READY_TO_ITERATE : PageDataState.ITERATION_STARTED;
 	}
 	
-	private void manageCountAll(SearchResponse res) {
+	private void manageCountAll(ResponseBody<?>res) {
 		dataRows = new ArrayList<DataRow>();
 		List<Object> data = new ArrayList<Object>();
-		data.add(res.getHits().getTotalHits().value);
+		data.add(res.hits().total().value());
 		dataRows.add(new DataRow(data));
 		fetchedRows = new Long(dataRows.size());
 		state = PageDataState.READY_TO_ITERATE;
 	}
 	
-	private void manageUngroupedExpression(SearchResponse searchResponse) {
+	private void manageUngroupedExpression(ResponseBody<?> searchResponse) {
 		dataRows = new ArrayList<DataRow>();
 		
 		DataRow dataRow = new DataRow(req.getSelect().getQueryColumns().size());
 		
-		searchResponse.getAggregations().asList().forEach(aggregation -> {
-			dataRow.put(Integer.parseInt(aggregation.getName()), resolveAggregationValue(aggregation));
+		searchResponse.aggregations().forEach((name, aggregation) -> {
+			dataRow.put(Integer.parseInt(name), resolveAggregationValue(aggregation));
 		});
 		dataRows.add(dataRow);
 		
@@ -132,13 +135,15 @@ public class PageDataElastic {
 	}
 	
 
-	private void manageGroupBy(SearchResponse searchResponse) {
+	private void manageGroupBy(ResponseBody<?> searchResponse) {
 		dataRows = new ArrayList<DataRow>();
 		
-		Aggregations aggregations = searchResponse.getAggregations();
+		Map<String, Aggregate> aggregations = searchResponse.aggregations();
 		Map<Integer, Object> rowValues = new HashMap<Integer, Object>();
 		
-		exploreGroupByResult(aggregations, rowValues);
+		aggregations.forEach((name, aggregation) -> {
+		  exploreGroupByResult(name, aggregation, rowValues);
+		});
 		fetchedRows = new Long(dataRows.size());
 		state = PageDataState.READY_TO_ITERATE;
 	}
@@ -152,32 +157,49 @@ public class PageDataElastic {
 		}
 	}
 	
-	private void exploreGroupByResult(Aggregations aggregations, Map<Integer, Object> rowValues) {
-		ParsedTerms aggregation = (ParsedTerms)aggregations.asList().get(0);	
-
-		for(Bucket bucket : aggregation.getBuckets()) {			
-			if(isStringAnInteger(aggregation.getName())) {
-				rowValues.put(Integer.parseInt(aggregation.getName()), bucket.getKey());
+	private void exploreGroupByResult(String name, Aggregate aggregation, Map<Integer, Object> rowValues) {
+	    MultiBucketAggregateBase<?> sterms = (MultiBucketAggregateBase<?>)aggregation._get();
+		List<?> buckets = sterms.buckets().array();
+		for(Object bucket : buckets) {
+		    Object key = null;
+		    long docCount = 0;
+		    Map<String, Aggregate> aggregations = null;
+		    if (bucket instanceof StringTermsBucket) {
+		      key = ((StringTermsBucket)bucket).key()._get();
+		      aggregations = ((StringTermsBucket)bucket).aggregations();
+		      docCount = ((StringTermsBucket)bucket).docCount();
+		    } else if (bucket instanceof LongTermsBucket) {
+		      key = ((LongTermsBucket)bucket).key();
+              aggregations = ((LongTermsBucket)bucket).aggregations();
+              docCount = ((LongTermsBucket)bucket).docCount();
+		    } else if (bucket instanceof DoubleTermsBucket) {
+              key = ((DoubleTermsBucket)bucket).key();
+              aggregations = ((DoubleTermsBucket)bucket).aggregations();
+              docCount = ((DoubleTermsBucket)bucket).docCount();
+            }
+			if(isStringAnInteger(name)) {
+				rowValues.put(Integer.parseInt(name), key);
 			}
-			
-			if(bucket.getAggregations() != null && bucket.getAggregations().asList().size() > 0 && bucket.getAggregations().asList().get(0) instanceof ParsedTerms) {
-				exploreGroupByResult(bucket.getAggregations(), rowValues);
-				continue;
+			if(aggregations != null && aggregations.size() > 0 && aggregations.values().stream().allMatch(p -> p._get() instanceof MultiBucketAggregateBase)) {
+			    aggregations.forEach((name1, aggs) -> {
+			      exploreGroupByResult(name1, aggs, rowValues);
+			    });
+			    continue;
 			} 
 			
 			DataRow dataRow = new DataRow(req.getSelect().getQueryColumns().size());
 			rowValues.forEach((idx, value) -> dataRow.put(idx, parseValue(idx, value)));
 			
-			if(bucket.getAggregations() != null) {
-				bucket.getAggregations().forEach(nestedAggregation -> {
-					dataRow.put(Integer.parseInt(nestedAggregation.getName()), resolveAggregationValue(nestedAggregation));
-				});
+			if(aggregations != null) {
+			  aggregations.forEach((name1, nestedAggregation) -> {
+				dataRow.put(Integer.parseInt(name1), resolveAggregationValue(nestedAggregation));
+			  });
 			}
 			
 			for(int idx = 0; idx < req.getSelect().getQueryColumns().size(); idx++) {
 				QueryColumn column = req.getSelect().getQueryColumns().get(idx);
 				if(column.getAggregatingFunctionExpression() != null && column.getAggregatingFunctionExpression().isAllColumns()) {
-					dataRow.put(idx, bucket.getDocCount());
+					dataRow.put(idx, docCount);
 				}
 			}
 			dataRows.add(dataRow);
@@ -193,14 +215,22 @@ public class PageDataElastic {
 		return value;
 	}
 
-	private Object resolveAggregationValue(Aggregation aggregation) {
-		if(aggregation instanceof ParsedSingleValueNumericMetricsAggregation) {
-			return ((ParsedSingleValueNumericMetricsAggregation)aggregation).value();
-		} else if(aggregation instanceof ValueCount) {
-			return new Double(((ValueCount)aggregation).value()).longValue();
-		} else if(aggregation instanceof ParsedCardinality) {
-			return new Double(((ParsedCardinality)aggregation).value()).longValue();
-		} 
+	private Object resolveAggregationValue(Aggregate aggregation) {
+		if(aggregation.isSimpleValue()) {
+			return aggregation.simpleValue().value();
+		} else if(aggregation.isValueCount()) {
+			return new Double(aggregation.valueCount().value()).longValue();
+		} else if(aggregation.isCardinality()) {
+			return aggregation.cardinality().value();
+		} else if (aggregation.isAvg()) {
+		    return aggregation.avg().value();
+		} else if (aggregation.isSum()) {
+          return aggregation.sum().value();
+        } else if (aggregation.isMax()) {
+          return aggregation.max().value();
+        } else if (aggregation.isMin()) {
+          return aggregation.min().value();
+        }
 		return null;
 	}
 
