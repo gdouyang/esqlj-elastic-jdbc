@@ -118,7 +118,7 @@ public class AggregationBuilder {
 	private static void manageOrdering(String columnName, TermsAggregation.Builder termsAggregation, SqlStatementSelect select) {
 		OrderByElement orderByElement = select.getOrderByElements().stream().filter(orderBy -> ((Column)orderBy.getExpression()).getColumnName().equalsIgnoreCase(columnName)).findFirst().orElse(null);
 		if(orderByElement != null) {
-		    NamedValue<SortOrder> of = NamedValue.of("_term", orderByElement.isAsc() ? SortOrder.Asc : SortOrder.Desc);
+		    NamedValue<SortOrder> of = NamedValue.of("_key", orderByElement.isAsc() ? SortOrder.Asc : SortOrder.Desc);
 			termsAggregation.order(of);
 		}
 	}
