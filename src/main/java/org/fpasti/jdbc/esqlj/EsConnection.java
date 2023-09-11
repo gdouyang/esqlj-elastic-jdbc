@@ -76,11 +76,6 @@ public class EsConnection implements Connection {
 	}
 
 	@Override
-	public PreparedStatement prepareStatement(String sql) throws SQLException {
-		throw new SQLFeatureNotSupportedException();
-	}
-
-	@Override
 	public CallableStatement prepareCall(String sql) throws SQLException {
 		throw new SQLFeatureNotSupportedException();
 	}
@@ -179,13 +174,7 @@ public class EsConnection implements Connection {
 		}
 		return new EsStatement(this);
 	}
-
-	@Override
-	public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency)
-			throws SQLException {
-		return null;
-	}
-
+	
 	@Override
 	public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
 		throw new SQLFeatureNotSupportedException();
@@ -236,6 +225,23 @@ public class EsConnection implements Connection {
 			throws SQLException {
 		throw new SQLFeatureNotSupportedException();
 	}
+	
+	@Override
+	public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency,
+			int resultSetHoldability) throws SQLException {
+		throw new SQLFeatureNotSupportedException();
+	}
+	
+	@Override
+	public PreparedStatement prepareStatement(String sql) throws SQLException {
+		return prepareStatement(sql, Statement.NO_GENERATED_KEYS);
+	}
+
+	@Override
+	public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency)
+			throws SQLException {
+		return prepareStatement(sql, resultSetType, resultSetConcurrency, 0);
+	}
 
 	@Override
 	public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency,
@@ -244,12 +250,6 @@ public class EsConnection implements Connection {
 			throw new SQLFeatureNotSupportedException("Only TYPE_FORWARD_ONLY - CONCUR_READ_ONLY is supported");
 		}
 		return new EsPreparedStatement(this, sql);
-	}
-
-	@Override
-	public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency,
-			int resultSetHoldability) throws SQLException {
-		throw new SQLFeatureNotSupportedException();
 	}
 
 	@Override
