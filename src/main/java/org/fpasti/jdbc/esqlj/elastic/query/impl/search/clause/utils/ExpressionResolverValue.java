@@ -7,12 +7,14 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.stream.Collectors;
 
+import org.fpasti.jdbc.esqlj.elastic.query.statement.IWhereCondition;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.ExpressionEnum;
 import org.fpasti.jdbc.esqlj.support.DateUtils;
 import org.fpasti.jdbc.esqlj.support.EsWrapException;
 
 import net.sf.jsqlparser.expression.DoubleValue;
 import net.sf.jsqlparser.expression.Function;
+import net.sf.jsqlparser.expression.JdbcParameter;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.StringValue;
 import net.sf.jsqlparser.expression.operators.arithmetic.Addition;
@@ -28,7 +30,7 @@ import net.sf.jsqlparser.schema.Column;
 
 public class ExpressionResolverValue {
 
-	public static Object evaluateValueExpression(Object expression) throws EsWrapException {
+	public static Object evaluateValueExpression(Object expression, IWhereCondition select) throws EsWrapException {
 		switch(ExpressionEnum.resolveByInstance(expression)) {	
 			case DOUBLE_VALUE:
 				DoubleValue doubleValue = (DoubleValue)expression;
@@ -40,25 +42,25 @@ public class ExpressionResolverValue {
 				LongValue longValue = (LongValue)expression;
 				return longValue.getValue();
 			case FUNCTION:
-				return resolveFunction((Function)expression);
+				return resolveFunction((Function)expression, select);
 			case ADDITION:
 				Addition addition = (Addition)expression;
-				return addition(evaluateValueExpression(addition.getLeftExpression()), evaluateValueExpression(addition.getRightExpression()));
+				return addition(evaluateValueExpression(addition.getLeftExpression(), select), evaluateValueExpression(addition.getRightExpression(), select));
 			case SUBTRACTION:
 				Subtraction subraction = (Subtraction)expression;
-				return subtraction(evaluateValueExpression(subraction.getLeftExpression()), evaluateValueExpression(subraction.getRightExpression()));
+				return subtraction(evaluateValueExpression(subraction.getLeftExpression(), select), evaluateValueExpression(subraction.getRightExpression(), select));
 			case DIVISION:
 				Division division = (Division)expression;
-				return division(evaluateValueExpression(division.getLeftExpression()), evaluateValueExpression(division.getRightExpression()));
+				return division(evaluateValueExpression(division.getLeftExpression(), select), evaluateValueExpression(division.getRightExpression(), select));
 			case MULTIPLICATION:
 				Multiplication multiplication = (Multiplication)expression;
-				return multiplication(evaluateValueExpression(multiplication.getLeftExpression()), evaluateValueExpression(multiplication.getRightExpression()));
+				return multiplication(evaluateValueExpression(multiplication.getLeftExpression(), select), evaluateValueExpression(multiplication.getRightExpression(), select));
 			case COLUMN:
 				Column column = (Column)expression;
 				if(column.getColumnName().equalsIgnoreCase("SYSDATE")) {
 					Function fSysDate = new Function();
 					fSysDate.setName("SYSDATE");
-					return resolveFunction((Function)fSysDate);
+					return resolveFunction((Function)fSysDate, select);
 				} else if(column.getColumnName().equalsIgnoreCase("TRUE")) {
 					return true;
 				} else if(column.getColumnName().equalsIgnoreCase("FALSE")) {
@@ -66,13 +68,18 @@ public class ExpressionResolverValue {
 				}
 			case EXPRESSION_LIST:
 				ExpressionList expressionList = (ExpressionList)expression;
-				return expressionList.getExpressions().stream().map(valueExpression -> evaluateValueExpression(valueExpression)).collect(Collectors.toList());
+				return expressionList.getExpressions().stream().map(valueExpression -> evaluateValueExpression(valueExpression, select)).collect(Collectors.toList());
+			case JDBC_PARAMETER:
+				if (null == select) {
+					throw new EsWrapException(new SQLException(String.format("Unmanaged expression: %s", ExpressionEnum.resolveByInstance(expression).name())));	
+				}
+				return select.getParameters().get(((JdbcParameter)expression).getIndex() - 1);
 			default:
 				throw new EsWrapException(new SQLException(String.format("Unmanaged expression: %s", ExpressionEnum.resolveByInstance(expression).name())));
 		}
 	}
 	
-	private static Object resolveFunction(Function function) throws EsWrapException {
+	private static Object resolveFunction(Function function, IWhereCondition select) throws EsWrapException {
 		ExpressionList parameters = (ExpressionList)function.getParameters();
 		
 		switch(function.getName().toUpperCase()) {
@@ -80,7 +87,7 @@ public class ExpressionResolverValue {
 				if(parameters.getExpressions().size() != 2) {
 					throw new EsWrapException(new SQLSyntaxErrorException("TO_DATE with invalid number of parameters"));
 				}
-				LocalDateTime resolveToDate = DateUtils.resolveToDate((String)evaluateValueExpression(parameters.getExpressions().get(0)), (String)evaluateValueExpression(parameters.getExpressions().get(1)));
+				LocalDateTime resolveToDate = DateUtils.resolveToDate((String)evaluateValueExpression(parameters.getExpressions().get(0), select), (String)evaluateValueExpression(parameters.getExpressions().get(1), select));
 				return resolveToDate.toInstant(OffsetDateTime.now().getOffset()).toEpochMilli();
 			case "NOW":
 			case "GETDATE":

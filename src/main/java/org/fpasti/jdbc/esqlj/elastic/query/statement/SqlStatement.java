@@ -1,5 +1,7 @@
 package org.fpasti.jdbc.esqlj.elastic.query.statement;
 
+import java.util.List;
+
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.Index;
 
 /**
@@ -9,10 +11,11 @@ import org.fpasti.jdbc.esqlj.elastic.query.statement.model.Index;
 public class SqlStatement {
 	private SqlStatementType type;
 	protected Index index;
-	
-	public SqlStatement(SqlStatementType type) {
+	protected List<Object> parameters;
+	public SqlStatement(SqlStatementType type, List<Object> parameters) {
 		super();
 		this.type = type;
+		this.parameters = parameters;
 	}
 
 	public SqlStatementType getType() {
@@ -23,4 +26,7 @@ public class SqlStatement {
 		return index;
 	}
 
+	public List<Object> getParameters() {
+		return this.parameters;
+	}
 }

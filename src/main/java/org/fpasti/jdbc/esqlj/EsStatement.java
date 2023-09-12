@@ -6,6 +6,8 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLWarning;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.fpasti.jdbc.esqlj.elastic.query.Executor;
 
@@ -15,11 +17,14 @@ import org.fpasti.jdbc.esqlj.elastic.query.Executor;
 
 public class EsStatement implements Statement {
 
-	private EsConnection connection;
-	private EsResultSet resultSet;
+	protected EsConnection connection;
+	protected EsResultSet resultSet;
+	
+	protected List<Object>parameters;
 
 	public EsStatement(EsConnection connection) {
 		this.connection = connection;
+		parameters = new ArrayList<>();
 	}
  
 	@Override
@@ -30,17 +35,6 @@ public class EsStatement implements Statement {
 	@Override
 	public boolean isWrapperFor(Class<?> iface) throws SQLException {
 		return iface.isInstance(this);
-	}
-
-	@Override
-	public ResultSet executeQuery(String sql) throws SQLException {
-		resultSet = new EsResultSet(Executor.execSql(connection, sql));
-		return resultSet;
-	}
-
-	@Override
-	public int executeUpdate(String sql) throws SQLException {
-		return 0;
 	}
 
 	@Override
@@ -105,7 +99,7 @@ public class EsStatement implements Statement {
 
 	@Override
 	public boolean execute(String sql) throws SQLException {
-		resultSet = new EsResultSet(Executor.execSql(connection, sql));
+		resultSet = new EsResultSet(Executor.execSql(connection, sql, parameters));
 		return !resultSet.getInternalQuery().isEmpty(); // todo: add also if it is an update query
 	}
 
@@ -182,6 +176,18 @@ public class EsStatement implements Statement {
 	@Override
 	public ResultSet getGeneratedKeys() throws SQLException {
 		throw new SQLFeatureNotSupportedException();
+	}
+	
+	@Override
+	public ResultSet executeQuery(String sql) throws SQLException {
+		resultSet = new EsResultSet(Executor.execSql(connection, sql, parameters));
+		return resultSet;
+	}
+
+	@Override
+	public int executeUpdate(String sql) throws SQLException {
+		resultSet = new EsResultSet(Executor.execSql(connection, sql, parameters));
+		return 1;
 	}
 
 	@Override

@@ -167,7 +167,7 @@ public class ClauseWhere {
 					return resolveExtract(greaterThan.getLeftExpression(), greaterThan.getRightExpression(), ">", select);
 				}
 				String column = getColumn(greaterThan.getLeftExpression(), select);
-				JsonData value = JsonData.of(ExpressionResolverValue.evaluateValueExpression(greaterThan.getRightExpression()));
+				JsonData value = JsonData.of(ExpressionResolverValue.evaluateValueExpression(greaterThan.getRightExpression(), select));
 				return new EvaluateQueryResult(QueryBuilders.range(r -> r.field(column).gt(value)));
 			case GREATER_THAN_EQUALS:
 				GreaterThanEquals greaterThanEquals = (GreaterThanEquals)expression;
@@ -176,7 +176,7 @@ public class ClauseWhere {
 				}
 				String column2 = getColumn(greaterThanEquals.getLeftExpression(), select);
 				return new EvaluateQueryResult(QueryBuilders.range(r -> r.field(column2)
-						.gte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(greaterThanEquals.getRightExpression())))));
+						.gte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(greaterThanEquals.getRightExpression(), select)))));
 			case MINOR_THAN:
 				MinorThan minorThan = (MinorThan)expression;
 				if(minorThan.getLeftExpression() instanceof ExtractExpression) {
@@ -184,7 +184,7 @@ public class ClauseWhere {
 				}
 				String column3 = getColumn(minorThan.getLeftExpression(), select);
 				return new EvaluateQueryResult(QueryBuilders.range(r -> r.field(column3)
-						.lt(JsonData.of(ExpressionResolverValue.evaluateValueExpression(minorThan.getRightExpression())))));
+						.lt(JsonData.of(ExpressionResolverValue.evaluateValueExpression(minorThan.getRightExpression(), select)))));
 			case MINOR_THAN_EQUALS:
 				MinorThanEquals minorThanEquals = (MinorThanEquals)expression;
 				if(minorThanEquals.getLeftExpression() instanceof ExtractExpression) {
@@ -192,14 +192,14 @@ public class ClauseWhere {
 				}
 				String column4 = getColumn(minorThanEquals.getLeftExpression(), select);
 				return new EvaluateQueryResult(QueryBuilders.range(r -> r.field(column4)
-						.lte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(minorThanEquals.getRightExpression())))));
+						.lte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(minorThanEquals.getRightExpression(), select)))));
 			case EQUALS_TO:
 				EqualsTo equalsTo = (EqualsTo)expression;
 				if(equalsTo.getLeftExpression() instanceof ExtractExpression) {
 					return resolveExtract(equalsTo.getLeftExpression(), equalsTo.getRightExpression(), "==", select);
 				}
 				EvaluateQueryResult etQr = new EvaluateQueryResult();
-				etQr.addEqualTerm(getColumn(equalsTo.getLeftExpression(), select), ExpressionResolverValue.evaluateValueExpression(equalsTo.getRightExpression()));
+				etQr.addEqualTerm(getColumn(equalsTo.getLeftExpression(), select), ExpressionResolverValue.evaluateValueExpression(equalsTo.getRightExpression(), select));
 				return etQr;
 			case NOT_EQUALS_TO:
 				NotEqualsTo notEqualsTo = (NotEqualsTo)expression;
@@ -207,7 +207,7 @@ public class ClauseWhere {
 					return resolveExtract(notEqualsTo.getLeftExpression(), notEqualsTo.getRightExpression(), "!=", select);
 				}
 				EvaluateQueryResult netQr = new EvaluateQueryResult();
-				netQr.addNotEqualTerm(getColumn(notEqualsTo.getLeftExpression(), select), ExpressionResolverValue.evaluateValueExpression(notEqualsTo.getRightExpression()));
+				netQr.addNotEqualTerm(getColumn(notEqualsTo.getLeftExpression(), select), ExpressionResolverValue.evaluateValueExpression(notEqualsTo.getRightExpression(), select));
 				return netQr;
 			case IS_NULL_EXPRESSION:
  				IsNullExpression isNullExpression = (IsNullExpression)expression;
@@ -238,20 +238,20 @@ public class ClauseWhere {
 				}
 				String column6 = getColumn(between.getLeftExpression(), select);
 				return new EvaluateQueryResult(QueryBuilders.range(r -> r.field(column6)
-						.gte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionStart())))
-						.lte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionEnd())))));
+						.gte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionStart(), select)))
+						.lte(JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionEnd(), select)))));
 			case LIKE_EXPRESSION:
 				LikeExpression likeExpression = (LikeExpression)expression;
 				String column7 = getColumn(likeExpression.getLeftExpression(), select);
 				return new EvaluateQueryResult(QueryBuilders.wildcard(w -> w.field(column7)
-						.value((String)ExpressionResolverValue.evaluateValueExpression(likeExpression.getRightExpression()))));
+						.value((String)ExpressionResolverValue.evaluateValueExpression(likeExpression.getRightExpression(), select))));
 			case IN_EXPRESSION:
 				InExpression inExpression = (InExpression)expression;
 				if(inExpression.getLeftExpression() instanceof ExtractExpression) {
 					return resolveExtract(inExpression.getLeftExpression(), inExpression.getRightItemsList(), "==", select);
 				}
 				EvaluateQueryResult etQrIe = new EvaluateQueryResult();
-				etQrIe.addEqualTerms(getColumn(inExpression.getLeftExpression(), select), (List<Object>)ExpressionResolverValue.evaluateValueExpression(inExpression.getRightItemsList()));
+				etQrIe.addEqualTerms(getColumn(inExpression.getLeftExpression(), select), (List<Object>)ExpressionResolverValue.evaluateValueExpression(inExpression.getRightItemsList(), select));
 				return etQrIe;
 			case FUNCTION:
 				Function function = (Function)expression;
@@ -276,7 +276,7 @@ public class ClauseWhere {
 			String scriptExpression = "";
 			for(int i = 0; i < expressionList.getExpressions().size(); i++) {
 				Expression expression = expressionList.getExpressions().get(i);
-				params.put(String.format("param%d", i), JsonData.of(ExpressionResolverValue.evaluateValueExpression(expression)));
+				params.put(String.format("param%d", i), JsonData.of(ExpressionResolverValue.evaluateValueExpression(expression, select)));
 				scriptExpression = scriptExpression.concat(scriptExpression.length() == 0 ? "" : " || ").concat(String.format("doc.%s.value.%s %s params.param%d", getColumn(extract.getExpression(), select), scriptDateMethod.getMethod(), operator, i));
 			}
 			Script script = new Script.Builder().inline(new InlineScript.Builder().params(params)
@@ -289,7 +289,7 @@ public class ClauseWhere {
 		}
 		
 		Map<String, JsonData> params = new HashMap<String, JsonData>();
-		params.put("param", JsonData.of(ExpressionResolverValue.evaluateValueExpression(valueExpression)));
+		params.put("param", JsonData.of(ExpressionResolverValue.evaluateValueExpression(valueExpression, select)));
 		Script script = new Script.Builder().inline(new InlineScript.Builder().params(params)
 				.source(String.format("doc.%s.value.%s %s params.param", getColumn(extract.getExpression(), select), scriptDateMethod.getMethod(), operator)).build()).build();
 		Query sq = QueryBuilders.script(s -> {
@@ -308,8 +308,8 @@ public class ClauseWhere {
 			throw new SQLSyntaxErrorException(String.format("Unsupported extract params '%s'", extract.getName()));
 		}
 		Map<String, JsonData> params = new HashMap<String, JsonData>();
-		params.put("param1", JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionStart())));
-		params.put("param2", JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionEnd())));
+		params.put("param1", JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionStart(), select)));
+		params.put("param2", JsonData.of(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionEnd(), select)));
 		
 		Script script = new Script.Builder().inline(new InlineScript.Builder().params(params)
 				.source(String.format("doc.%s.value.%s >= params.param1 && doc.%s.value.%s <= params.param2", getColumn(extract.getExpression(), select), scriptDateMethod.getMethod(), getColumn(extract.getExpression(), select), scriptDateMethod.getMethod())).build()).build();

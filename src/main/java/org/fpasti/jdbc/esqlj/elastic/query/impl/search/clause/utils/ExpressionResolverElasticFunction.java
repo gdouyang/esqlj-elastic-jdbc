@@ -9,13 +9,10 @@ import org.fpasti.jdbc.esqlj.elastic.query.impl.search.model.EvaluateQueryResult
 import org.fpasti.jdbc.esqlj.support.EsqljConstants;
 import org.fpasti.jdbc.esqlj.support.Utils;
 
-import co.elastic.clients.elasticsearch._types.CoordsGeoBounds;
 import co.elastic.clients.elasticsearch._types.GeoBounds;
 import co.elastic.clients.elasticsearch._types.GeoLocation;
 import co.elastic.clients.elasticsearch._types.TopLeftBottomRightGeoBounds;
 import co.elastic.clients.elasticsearch._types.query_dsl.GeoBoundingBoxQuery;
-import co.elastic.clients.elasticsearch._types.query_dsl.GeoValidationMethod;
-import co.elastic.clients.elasticsearch._types.query_dsl.QueryBase;
 import co.elastic.clients.elasticsearch._types.query_dsl.QueryBuilders;
 import co.elastic.clients.elasticsearch._types.query_dsl.QueryStringQuery.Builder;
 import net.sf.jsqlparser.expression.Function;
@@ -28,7 +25,7 @@ public class ExpressionResolverElasticFunction {
 
 	public static EvaluateQueryResult manageExpression(Function function) throws SQLSyntaxErrorException {
 		String queryType = function.getName().toUpperCase();
-		List<Object> arguments = function.getParameters().getExpressions().stream().map(param -> ExpressionResolverValue.evaluateValueExpression(param)).collect(Collectors.toList());
+		List<Object> arguments = function.getParameters().getExpressions().stream().map(param -> ExpressionResolverValue.evaluateValueExpression(param, null)).collect(Collectors.toList());
 		
 		switch(queryType) {
 			case "QUERY_STRING":

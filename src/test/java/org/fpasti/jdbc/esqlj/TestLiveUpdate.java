@@ -3,6 +3,7 @@ package org.fpasti.jdbc.esqlj;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -23,12 +24,15 @@ public class TestLiveUpdate
 {
 	@Test
 	public void update() throws SQLException {
-//		Statement stmt = TestUtils.getLiveConnection().createStatement();
-//		stmt.execute(TestUtils.resolveTestIndex("UPDATE \"goiot-device\"\r\n"
-//				+ "	SET name='西西俱乐部无风2', state='offline'"
-//				+ "	WHERE \"_id\"='xixiBikeClub';\r\n"
-//				+ ""));
-//		stmt.close();
+		String sql = "UPDATE \"goiot-device\"\r\n"
+				+ "	SET name=?, state='offline'"
+				+ "	WHERE \"_id\"='xixiBikeClub';\r\n"
+				+ "";
+		PreparedStatement stmt = TestUtils.getLiveConnection().prepareStatement(sql);
+		stmt.setString(0, "西西俱乐部无风2");
+		stmt.setString(1, "xixiBikeClub");
+		stmt.execute();
+		stmt.close();
 	}
 	
 	@Test

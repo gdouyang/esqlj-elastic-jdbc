@@ -28,8 +28,8 @@ public class SqlStatementUpdate extends SqlStatement implements IWhereCondition 
 	
 	private Script script;
 	
-	public SqlStatementUpdate(Update statement) throws SQLException {
-		super(SqlStatementType.SELECT);
+	public SqlStatementUpdate(Update statement, List<Object> parameters) throws SQLException {
+		super(SqlStatementType.SELECT, parameters);
 		
 	    Table table = statement.getTable();
 	    Alias alias = table.getAlias();
@@ -40,19 +40,19 @@ public class SqlStatementUpdate extends SqlStatement implements IWhereCondition 
 		
 		List<Column> columns = statement.getColumns();
 		List<Expression> expressions = statement.getExpressions();
-		Map<String, JsonData> params = new HashMap<>();
+		Map<String, JsonData> p = new HashMap<>();
 		StringBuilder sb = new StringBuilder();
 		for (int i = 0; i < columns.size(); i++) {
 			Column column = columns.get(i);
 			Expression expression = expressions.get(i);
 			
 			String columnName = column.getColumnName();
-			JsonData value = JsonData.of(ExpressionResolverValue.evaluateValueExpression(expression));
-			params.put(columnName, value);
+			JsonData value = JsonData.of(ExpressionResolverValue.evaluateValueExpression(expression, this));
+			p.put(columnName, value);
 			sb.append(String.format("ctx._source.%s = params.%s;", column, column));
 		}
 		script = new Script.Builder().inline(new InlineScript.Builder()
-				.params(params)
+				.params(p)
 				.source(sb.toString())
 				.build())
 				.build();
@@ -67,7 +67,7 @@ public class SqlStatementUpdate extends SqlStatement implements IWhereCondition 
 	public QueryColumn getColumnsByNameOrAlias(String columnName) {
 		return new QueryColumn(columnName, columnName, index.getName());
 	}
-
+	
 	public Script getScript() {
 		return script;
 	}

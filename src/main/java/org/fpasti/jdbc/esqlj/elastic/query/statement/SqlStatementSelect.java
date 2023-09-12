@@ -34,8 +34,8 @@ public class SqlStatementSelect extends SqlStatement implements IWhereCondition 
 	private List<String> groupByColumns;
 	private QueryType queryType = QueryType.DOCS;
 	
-	public SqlStatementSelect(Select statement) {
-		super(SqlStatementType.SELECT);
+	public SqlStatementSelect(Select statement, List<Object> parameters) {
+		super(SqlStatementType.SELECT, parameters);
 		select = (PlainSelect)statement.getSelectBody();
 		
 		init();

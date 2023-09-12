@@ -14,8 +14,8 @@ import net.sf.jsqlparser.statement.drop.Drop;
 public class SqlStatementDrop extends SqlStatement {
   private List<Index> indices;
 
-  public SqlStatementDrop(Drop statement) {
-    super(SqlStatementType.DROP);
+  public SqlStatementDrop(Drop statement, List<Object> parameters) {
+    super(SqlStatementType.DROP, parameters);
 
     Table table = statement.getName();
     Alias alias = table.getAlias();

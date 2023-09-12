@@ -2,6 +2,7 @@ package org.fpasti.jdbc.esqlj.elastic.query;
 
 import java.sql.SQLException;
 import java.sql.SQLSyntaxErrorException;
+import java.util.List;
 
 import org.fpasti.jdbc.esqlj.EsConnection;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.ElasticDelete;
@@ -9,7 +10,6 @@ import org.fpasti.jdbc.esqlj.elastic.query.impl.ElasticDrop;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.ElasticInsert;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.ElasticQuery;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.ElasticUpdate;
-import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatement;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementDelete;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementDrop;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementInsert;
@@ -30,20 +30,20 @@ import net.sf.jsqlparser.statement.update.Update;
 
 public class Executor {
 	
-	public static AbstractQuery execSql(EsConnection connection, String sql) throws SQLException {
+	public static AbstractQuery execSql(EsConnection connection, String sql, List<Object> params) throws SQLException {
 		try {
 			Statement statement =  CCJSqlParserUtil.parse(sql);
 			switch(statement.getClass().getSimpleName()) {
 			case "Select":
-				return new ElasticQuery(connection, new SqlStatementSelect((Select)statement));
+				return new ElasticQuery(connection, new SqlStatementSelect((Select)statement, params));
 			case "Update":
-				return new ElasticUpdate(connection, new SqlStatementUpdate((Update)statement));
+				return new ElasticUpdate(connection, new SqlStatementUpdate((Update)statement, params));
 			case "Insert":
-				return new ElasticInsert(connection, new SqlStatementInsert((Insert)statement));
+				return new ElasticInsert(connection, new SqlStatementInsert((Insert)statement, params));
 			case "Delete":
-				return new ElasticDelete(connection, new SqlStatementDelete((Delete)statement));
+				return new ElasticDelete(connection, new SqlStatementDelete((Delete)statement, params));
 			case "Drop":
-				return new ElasticDrop(connection, new SqlStatementDrop((Drop)statement));
+				return new ElasticDrop(connection, new SqlStatementDrop((Drop)statement, params));
 			default:
 				throw new SQLSyntaxErrorException("Unrecognized statement [" + statement.getClass().getSimpleName() + "]");
 			}

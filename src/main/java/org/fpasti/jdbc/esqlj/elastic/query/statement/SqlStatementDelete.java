@@ -24,9 +24,9 @@ public class SqlStatementDelete extends SqlStatement implements IWhereCondition 
   private String id;
 
   private Expression where;
-
-  public SqlStatementDelete(Delete statement) throws SQLException {
-    super(SqlStatementType.DELETE);
+  
+  public SqlStatementDelete(Delete statement, List<Object> parameters) throws SQLException {
+    super(SqlStatementType.DELETE, parameters);
 
     Table table = statement.getTable();
     Alias alias = table.getAlias();
@@ -49,7 +49,7 @@ public class SqlStatementDelete extends SqlStatement implements IWhereCondition 
           String.format("Unsupported WHERE expression: %s", where.toString()));
     }
     this.id = String
-        .valueOf(ExpressionResolverValue.evaluateValueExpression(equalsTo.getRightExpression()));
+        .valueOf(ExpressionResolverValue.evaluateValueExpression(equalsTo.getRightExpression(), this));
   }
 
   public String getId() {
@@ -63,6 +63,6 @@ public class SqlStatementDelete extends SqlStatement implements IWhereCondition 
   public QueryColumn getColumnsByNameOrAlias(String columnName) {
     return new QueryColumn(columnName, columnName, index.getName());
   }
-
+  
 
 }

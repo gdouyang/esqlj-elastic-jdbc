@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.clause.utils.ExpressionResolverValue;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.Index;
+import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryColumn;
 
 import net.sf.jsqlparser.expression.Alias;
 import net.sf.jsqlparser.expression.Expression;
@@ -21,11 +22,11 @@ import net.sf.jsqlparser.statement.insert.Insert;
 * @author  Fabrizio Pasti - fabrizio.pasti@gmail.com
 */
 
-public class SqlStatementInsert extends SqlStatement {
+public class SqlStatementInsert extends SqlStatement implements IWhereCondition {
 
 	private Map<String, Object> doc;
-	public SqlStatementInsert(Insert statement) throws SQLException {
-		super(SqlStatementType.INSERT);
+	public SqlStatementInsert(Insert statement, List<Object> parameters) throws SQLException {
+		super(SqlStatementType.INSERT, parameters);
 		
 		Table table = statement.getTable();
 	    Alias alias = table.getAlias();
@@ -44,7 +45,7 @@ public class SqlStatementInsert extends SqlStatement {
 				String columnName = column.getColumnName();
 				
 				Expression expression = expressions.get(i);
-				doc.put(columnName, ExpressionResolverValue.evaluateValueExpression(expression));
+				doc.put(columnName, ExpressionResolverValue.evaluateValueExpression(expression, this));
 			}
 		} else {
 			throw new SQLSyntaxErrorException("Unsupport ItemsList " + itemsList.getClass().getName());
@@ -53,5 +54,14 @@ public class SqlStatementInsert extends SqlStatement {
 	public Map<String, Object> getDoc() {
 		return doc;
 	}
+	@Override
+	public Expression getWhereCondition() {
+		return null;
+	}
+	@Override
+	public QueryColumn getColumnsByNameOrAlias(String columnName) {
+		return new QueryColumn(columnName, columnName, index.getName());
+	}
+	
 	
 }

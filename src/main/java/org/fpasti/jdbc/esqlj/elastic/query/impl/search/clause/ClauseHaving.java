@@ -11,7 +11,6 @@ import org.fpasti.jdbc.esqlj.elastic.query.statement.model.ExpressionEnum;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryColumn;
 import co.elastic.clients.elasticsearch._types.InlineScript;
 import co.elastic.clients.elasticsearch._types.Script;
-import co.elastic.clients.elasticsearch._types.aggregations.Aggregation.Builder.ContainerBuilder;
 import co.elastic.clients.elasticsearch._types.aggregations.BucketSelectorAggregation;
 import co.elastic.clients.elasticsearch._types.aggregations.BucketsPath;
 import net.sf.jsqlparser.expression.Expression;
@@ -68,22 +67,22 @@ public class ClauseHaving {
 				return String.format("(%s)", evaluateHavingExpression(parenthesis.getExpression(), select));
 			case GREATER_THAN:
 				GreaterThan greaterThan = (GreaterThan)expression;
-				return String.format("%s>%s", getColumn(greaterThan.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(greaterThan.getRightExpression())));
+				return String.format("%s>%s", getColumn(greaterThan.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(greaterThan.getRightExpression(), select)));
 			case GREATER_THAN_EQUALS:
 				GreaterThanEquals greaterThanEquals = (GreaterThanEquals)expression;
-				return String.format("%s>=%s", getColumn(greaterThanEquals.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(greaterThanEquals.getRightExpression())));
+				return String.format("%s>=%s", getColumn(greaterThanEquals.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(greaterThanEquals.getRightExpression(), select)));
 			case MINOR_THAN:
 				MinorThan minorThan = (MinorThan)expression;
-				return String.format("%s<%s", getColumn(minorThan.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(minorThan.getRightExpression())));
+				return String.format("%s<%s", getColumn(minorThan.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(minorThan.getRightExpression(), select)));
 			case MINOR_THAN_EQUALS:
 				MinorThanEquals minorThanEquals = (MinorThanEquals)expression;
-				return String.format("%s<=%s", getColumn(minorThanEquals.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(minorThanEquals.getRightExpression())));
+				return String.format("%s<=%s", getColumn(minorThanEquals.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(minorThanEquals.getRightExpression(), select)));
 			case EQUALS_TO:
 				EqualsTo equalsTo = (EqualsTo)expression;
-				return String.format("%s==%s", getColumn(equalsTo.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(equalsTo.getRightExpression())));
+				return String.format("%s==%s", getColumn(equalsTo.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(equalsTo.getRightExpression(), select)));
 			case NOT_EQUALS_TO:
 				NotEqualsTo notEqualsTo = (NotEqualsTo)expression;
-				return String.format("%s!=%s", getColumn(notEqualsTo.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(notEqualsTo.getRightExpression())));
+				return String.format("%s!=%s", getColumn(notEqualsTo.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(notEqualsTo.getRightExpression(), select)));
 			case IS_NULL_EXPRESSION:
  				IsNullExpression isNullExpression = (IsNullExpression)expression;
 				return String.format("%s==null", getColumn(isNullExpression.getLeftExpression(), select));
@@ -92,7 +91,7 @@ public class ClauseHaving {
 				return String.format("!(%s)", evaluateHavingExpression(notExpression.getExpression(), select));
 			case BETWEEN:
 				Between between = (Between)expression;
-				return String.format("%s>=%s AND %s<=%s", getColumn(between.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionStart())), getColumn(between.getLeftExpression(), select), ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionEnd()));
+				return String.format("%s>=%s AND %s<=%s", getColumn(between.getLeftExpression(), select), formatValue(ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionStart(), select)), getColumn(between.getLeftExpression(), select), ExpressionResolverValue.evaluateValueExpression(between.getBetweenExpressionEnd(), select));
 			default:
 				throw new SQLSyntaxErrorException(String.format("Unmanaged expression: %s", ExpressionEnum.resolveByInstance(expression).name()));
 		}
