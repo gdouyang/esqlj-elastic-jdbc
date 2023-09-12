@@ -6,6 +6,8 @@ import java.sql.RowId;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLSyntaxErrorException;
+import java.util.logging.Level;
+
 import org.fpasti.jdbc.esqlj.EsConnection;
 import org.fpasti.jdbc.esqlj.elastic.query.AbstractQuery;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementDrop;
@@ -27,9 +29,13 @@ public class ElasticDrop extends AbstractQuery {
 	private void initialFetch(SqlStatementDrop select) throws SQLException {
 		try {
 		    DeleteIndexRequest request = new DeleteIndexRequest.Builder().index(select.getIndex().getName()).build();
-			System.out.println("request data= " + request.toString());
-			DeleteIndexResponse delete = getConnection().getElasticClient().indices().delete(request);
-			System.out.println(delete);
+		    if (logger.isLoggable(Level.INFO)) {
+		    	logger.info("request data= " + request.toString());
+		    }
+			DeleteIndexResponse resp = getConnection().getElasticClient().indices().delete(request);
+			if (logger.isLoggable(Level.INFO)) {
+		      logger.info("resp data= " + resp);
+		    }
 		} catch(EsRuntimeException ere) {
 			throw new SQLSyntaxErrorException(ere.getMessage());
 		} catch(IOException e) {

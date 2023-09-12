@@ -10,34 +10,42 @@ import java.util.logging.Level;
 
 import org.fpasti.jdbc.esqlj.EsConnection;
 import org.fpasti.jdbc.esqlj.elastic.query.AbstractQuery;
-import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementDelete;
+import org.fpasti.jdbc.esqlj.elastic.query.impl.search.clause.ClauseWhere;
+import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementUpdate;
 import org.fpasti.jdbc.esqlj.support.EsRuntimeException;
-import co.elastic.clients.elasticsearch.core.DeleteRequest;
-import co.elastic.clients.elasticsearch.core.DeleteResponse;
+
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch.core.UpdateByQueryRequest;
+import co.elastic.clients.elasticsearch.core.UpdateByQueryResponse;
 
 /**
  * @author Fabrizio Pasti - fabrizio.pasti@gmail.com
  */
 
-public class ElasticDelete extends AbstractQuery {
+public class ElasticUpdate extends AbstractQuery {
 
-  public ElasticDelete(EsConnection connection, SqlStatementDelete delete) throws SQLException {
+  public ElasticUpdate(EsConnection connection, SqlStatementUpdate delete) throws SQLException {
     super(connection, delete.getIndex().getName());
     initialFetch(delete);
   }
 
-  private void initialFetch(SqlStatementDelete delete) throws SQLException {
+  private void initialFetch(SqlStatementUpdate delete) throws SQLException {
     try {
-      DeleteRequest request = new DeleteRequest.Builder()//
+	  Query query = ClauseWhere.manageDleteWhere(delete);
+	  
+      UpdateByQueryRequest request = new UpdateByQueryRequest.Builder()//
           .index(delete.getIndex().getName())//
-          .id(delete.getId()).build();
+          .query(query)
+          .script(delete.getScript())
+          .build();
+      
       if (logger.isLoggable(Level.INFO)) {
-	   logger.info("request data= " + request.toString());
+	    logger.info("request data= " + request);
 	  }
-      DeleteResponse resp = getConnection().getElasticClient().delete(request);
+      UpdateByQueryResponse resp = getConnection().getElasticClient().updateByQuery(request);
       if (logger.isLoggable(Level.INFO)) {
-	    logger.info("resp data= " + resp);
-	  }
+    	  logger.info("resp data= " + resp);
+      }
     } catch (EsRuntimeException ere) {
       throw new SQLSyntaxErrorException(ere.getMessage());
     } catch (IOException e) {

@@ -6,6 +6,7 @@ import java.sql.RowId;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLSyntaxErrorException;
+import java.util.logging.Level;
 
 import org.fpasti.jdbc.esqlj.Configuration;
 import org.fpasti.jdbc.esqlj.ConfigurationPropertyEnum;
@@ -52,11 +53,13 @@ public class ElasticQuery extends AbstractQuery {
 			
 			pageData = new PageDataElastic(getSource(), requestInstance);
 			
-			SearchRequest searchRequest = requestInstance.getSearchRequest();
+			SearchRequest request = requestInstance.getSearchRequest();
 			
-			System.out.println("request data= " + searchRequest.toString());
+			if (logger.isLoggable(Level.INFO)) {
+		    	logger.info("request data= " + request.toString());
+		    }
 				
-			SearchResponse<?> searchResponse = getConnection().getElasticClient().search(searchRequest, Object.class);
+			SearchResponse<?> searchResponse = getConnection().getElasticClient().search(request, Object.class);
 			pageData.pushData(searchResponse);
 			requestInstance.updateRequest(searchResponse, pageData);
 			rsEmpty = pageData.isEmpty();

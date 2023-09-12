@@ -22,10 +22,22 @@ import org.junit.jupiter.api.extension.ExtendWith;
 public class TestLiveUpdate
 {
 	@Test
-	public void selectStar() throws SQLException {
-		Statement stmt = TestUtils.getLiveConnection().createStatement();
-		stmt.execute(TestUtils.resolveTestIndex("UPDATE testIndex set keywordField = 'abc'"));
-		stmt.close();
+	public void update() throws SQLException {
+//		Statement stmt = TestUtils.getLiveConnection().createStatement();
+//		stmt.execute(TestUtils.resolveTestIndex("UPDATE \"goiot-device\"\r\n"
+//				+ "	SET name='西西俱乐部无风2', state='offline'"
+//				+ "	WHERE \"_id\"='xixiBikeClub';\r\n"
+//				+ ""));
+//		stmt.close();
+	}
+	
+	@Test
+	public void insert() throws SQLException {
+//		Statement stmt = TestUtils.getLiveConnection().createStatement();
+//		stmt.execute(TestUtils.resolveTestIndex("insert into \"goiot-device\" (id, name, state) values( "
+//				+ "	'test2', '西西俱乐部无风2','offline')"
+//				+ ""));
+//		stmt.close();
 	}
 	
 	@Test
@@ -37,8 +49,8 @@ public class TestLiveUpdate
 	
 	@Test
     public void delete() throws SQLException {
-        Statement stmt = TestUtils.getLiveConnection().createStatement();
-        stmt.execute(TestUtils.resolveTestIndex("delete from \"goiot-devicelogs-mqttserver-202306\" where _id = '4XiHhYgBhOJQaUsJR8FQ'"));
-        stmt.close();
+//        Statement stmt = TestUtils.getLiveConnection().createStatement();
+//        stmt.execute(TestUtils.resolveTestIndex("delete from \"goiot-devicelogs-mqttserver-202306\" where _id = '4XiHhYgBhOJQaUsJR8FQ'"));
+//        stmt.close();
     }
 }

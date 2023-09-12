@@ -6,38 +6,58 @@ import java.sql.RowId;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLSyntaxErrorException;
+import java.util.Map;
 import java.util.logging.Level;
 
 import org.fpasti.jdbc.esqlj.EsConnection;
 import org.fpasti.jdbc.esqlj.elastic.query.AbstractQuery;
-import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementDelete;
+import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementInsert;
 import org.fpasti.jdbc.esqlj.support.EsRuntimeException;
-import co.elastic.clients.elasticsearch.core.DeleteRequest;
-import co.elastic.clients.elasticsearch.core.DeleteResponse;
+
+import co.elastic.clients.elasticsearch.core.CreateRequest;
+import co.elastic.clients.elasticsearch.core.CreateResponse;
 
 /**
  * @author Fabrizio Pasti - fabrizio.pasti@gmail.com
  */
 
-public class ElasticDelete extends AbstractQuery {
+public class ElasticInsert extends AbstractQuery {
 
-  public ElasticDelete(EsConnection connection, SqlStatementDelete delete) throws SQLException {
-    super(connection, delete.getIndex().getName());
-    initialFetch(delete);
+  public ElasticInsert(EsConnection connection, SqlStatementInsert insert) throws SQLException {
+    super(connection, insert.getIndex().getName());
+    initialFetch(insert);
   }
 
-  private void initialFetch(SqlStatementDelete delete) throws SQLException {
+  private void initialFetch(SqlStatementInsert insert) throws SQLException {
     try {
-      DeleteRequest request = new DeleteRequest.Builder()//
-          .index(delete.getIndex().getName())//
-          .id(delete.getId()).build();
-      if (logger.isLoggable(Level.INFO)) {
-	   logger.info("request data= " + request.toString());
-	  }
-      DeleteResponse resp = getConnection().getElasticClient().delete(request);
-      if (logger.isLoggable(Level.INFO)) {
-	    logger.info("resp data= " + resp);
-	  }
+    	Map<String, Object> doc = insert.getDoc();
+//	  if (insert.getDoc().get("id") != null) {
+		  CreateRequest<Map<String, Object>> request = new CreateRequest.Builder<Map<String, Object>>()//
+				  .index(insert.getIndex().getName())//
+				  .document(doc)
+				  .id(doc.containsKey("id") ? String.valueOf(doc.get("id")) : null)
+				  .build();
+		  
+		  if (logger.isLoggable(Level.INFO)) {
+			  logger.info("request data= " + request);
+		  }
+		  CreateResponse resp = getConnection().getElasticClient().create(request);
+		  if (logger.isLoggable(Level.INFO)) {
+			  logger.info("resp data= " + resp);
+		  }
+//	  } else {
+//		  IndexRequest<Map<String, Object>> request = new IndexRequest.Builder<Map<String, Object>>()
+//				  .index(insert.getIndex().getName())//
+//				  .document(insert.getDoc())
+//				  .build();
+//		  if (logger.isLoggable(Level.INFO)) {
+//			  logger.info("request data= " + request);
+//		  }
+//		  IndexResponse resp = getConnection().getElasticClient().index(request);
+//		  if (logger.isLoggable(Level.INFO)) {
+//			  logger.info("resp data= " + resp);
+//		  }
+//	  }
     } catch (EsRuntimeException ere) {
       throw new SQLSyntaxErrorException(ere.getMessage());
     } catch (IOException e) {

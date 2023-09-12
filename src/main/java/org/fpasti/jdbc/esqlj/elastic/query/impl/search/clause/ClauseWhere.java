@@ -14,7 +14,6 @@ import org.fpasti.jdbc.esqlj.elastic.query.impl.search.model.ElasticScriptMethod
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.model.EvaluateQueryResult;
 import org.fpasti.jdbc.esqlj.elastic.query.impl.search.model.TermsQuery;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.IWhereCondition;
-import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementDelete;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.SqlStatementSelect;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.ExpressionEnum;
 import org.fpasti.jdbc.esqlj.elastic.query.statement.model.QueryColumn;
@@ -99,7 +98,7 @@ public class ClauseWhere {
 		req.getSearchSourceBuilder().query(qb);
 	}
 	
-	public static Query manageDleteWhere(SqlStatementDelete select) throws SQLSyntaxErrorException {
+	public static Query manageDleteWhere(IWhereCondition select) throws SQLSyntaxErrorException {
       if(select.getWhereCondition() == null) {
           return null;
       }
@@ -334,12 +333,11 @@ public class ClauseWhere {
 			qb.mustNot(result.getNotQueryBuilders());
 		}
 		if(!result.isTermsEmpty()) {
-			addTermsQuery((BoolQuery.Builder)qb, result.getTermsQuery(), result.isAnd());
+			addTermsQuery(qb, result.getTermsQuery(), result.isAnd());
 		}
 	}
 	
 	private static Query createBoolQueryBuilder(EvaluateQueryResult queryResult) {
-		
 		
 		return BoolQuery.of(b -> {
 			b.must(queryResult.getQueryBuilders())

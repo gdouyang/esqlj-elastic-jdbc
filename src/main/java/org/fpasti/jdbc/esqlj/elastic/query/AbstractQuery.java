@@ -5,6 +5,7 @@ import java.sql.RowId;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Logger;
 
 import org.fpasti.jdbc.esqlj.EsConnection;
 
@@ -13,6 +14,7 @@ import org.fpasti.jdbc.esqlj.EsConnection;
 */
 
 public abstract class AbstractQuery {
+	public static Logger logger = Logger.getLogger(Logger.GLOBAL_LOGGER_NAME);
 	private EsConnection connection;
 	private List<String> columnNames;
 	protected boolean open = true;
