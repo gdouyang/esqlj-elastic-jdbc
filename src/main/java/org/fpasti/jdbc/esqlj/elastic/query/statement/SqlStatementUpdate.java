@@ -46,10 +46,10 @@ public class SqlStatementUpdate extends SqlStatement implements IWhereCondition 
 			Column column = columns.get(i);
 			Expression expression = expressions.get(i);
 			
-			String columnName = column.getColumnName();
+			String columnName = this.getColumnsByNameOrAlias(column.getColumnName()).getName();
 			JsonData value = JsonData.of(ExpressionResolverValue.evaluateValueExpression(expression, this));
 			p.put(columnName, value);
-			sb.append(String.format("ctx._source.%s = params.%s;", column, column));
+			sb.append(String.format("ctx._source.%s = params.%s;", columnName, columnName));
 		}
 		script = new Script.Builder().inline(new InlineScript.Builder()
 				.params(p)

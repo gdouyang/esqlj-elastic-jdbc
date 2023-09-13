@@ -100,6 +100,12 @@
 				<configuration>
 					<shadedArtifactAttached>true</shadedArtifactAttached>
 					<shadedClassifierName>shaded</shadedClassifierName>
+					<relocations>
+            <relocation>
+              <pattern>net.sf.jsqlparser</pattern>
+              <shadedPattern>shaded.net.sf.jsqlparser</shadedPattern>
+            </relocation>
+          </relocations>
 				</configuration>
 				<executions>
 					<execution>

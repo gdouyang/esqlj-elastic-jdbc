@@ -42,7 +42,7 @@ public class SqlStatementInsert extends SqlStatement implements IWhereCondition 
 			List<Expression> expressions = expList.getExpressions();
 			for (int i = 0; i < columns.size(); i++) {
 				Column column = columns.get(i);
-				String columnName = column.getColumnName();
+				String columnName = this.getColumnsByNameOrAlias(column.getColumnName()).getName();
 				
 				Expression expression = expressions.get(i);
 				doc.put(columnName, ExpressionResolverValue.evaluateValueExpression(expression, this));

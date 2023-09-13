@@ -29,14 +29,14 @@ public class ElasticUpdate extends AbstractQuery {
     initialFetch(delete);
   }
 
-  private void initialFetch(SqlStatementUpdate delete) throws SQLException {
+  private void initialFetch(SqlStatementUpdate update) throws SQLException {
     try {
-	  Query query = ClauseWhere.manageDleteWhere(delete);
+	  Query query = ClauseWhere.manageDleteWhere(update);
 	  
       UpdateByQueryRequest request = new UpdateByQueryRequest.Builder()//
-          .index(delete.getIndex().getName())//
+          .index(update.getIndex().getName())//
           .query(query)
-          .script(delete.getScript())
+          .script(update.getScript())
           .build();
       
       if (logger.isLoggable(Level.INFO)) {
