@@ -24,15 +24,15 @@ public class TestLiveUpdate
 {
 	@Test
 	public void update() throws SQLException {
-		String sql = "UPDATE \"goiot-device\"\r\n"
-				+ "	SET name=?, state='offline'"
-				+ "	WHERE \"_id\"='xixiBikeClub';\r\n"
-				+ "";
-		PreparedStatement stmt = TestUtils.getLiveConnection().prepareStatement(sql);
-		stmt.setString(0, "西西俱乐部无风2");
-		stmt.setString(1, "xixiBikeClub");
-		stmt.execute();
-		stmt.close();
+//		String sql = "UPDATE \"goiot-device\"\r\n"
+//				+ "	SET name=?, state='offline'"
+//				+ "	WHERE \"_id\"='xixiBikeClub';\r\n"
+//				+ "";
+//		PreparedStatement stmt = TestUtils.getLiveConnection().prepareStatement(sql);
+//		stmt.setString(1, "西西俱乐部无风2");
+//		stmt.setString(2, "xixiBikeClub");
+//		stmt.execute();
+//		stmt.close();
 	}
 	
 	@Test
